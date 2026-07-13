@@ -26,6 +26,8 @@ import {
   UploadCloud,
   X,
   Eye,
+  Wrench,
+  Users as UsersIcon,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 
@@ -1078,14 +1080,24 @@ export default function ShiftsChecklists({
                             <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5 pr-1">
                           {dayEventsCount > 0 && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title={`${dayEventsCount} evento(s) marcado(s)`}></span>
+                            <div className="flex gap-0.5">
+                              {allDayShifts.flatMap(s => s.events || []).some(e => e.tipo === "Manutenção") && (
+                                <Wrench className="h-2.5 w-2.5 text-amber-500" title="Manutenção agendada" />
+                              )}
+                              {allDayShifts.flatMap(s => s.events || []).some(e => e.tipo === "Reunião") && (
+                                <UsersIcon className="h-2.5 w-2.5 text-blue-500" title="Reunião agendada" />
+                              )}
+                              {allDayShifts.flatMap(s => s.events || []).some(e => e.tipo !== "Manutenção" && e.tipo !== "Reunião") && (
+                                <CalendarIcon className="h-2.5 w-2.5 text-indigo-400" title="Outros eventos" />
+                              )}
+                            </div>
                           )}
                           {dayOccurrencesCount > 0 && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" title={`${dayOccurrencesCount} ocorrência(s) registrada(s)`}></span>
+                            <AlertTriangle className="h-2.5 w-2.5 text-rose-500 animate-pulse" title={`${dayOccurrencesCount} ocorrência(s) registrada(s)`} />
                           )}
-                          <div>{dayNum}</div>
+                          <div className="ml-1 text-slate-700">{dayNum}</div>
                         </div>
                       </div>
 
@@ -1442,7 +1454,8 @@ export default function ShiftsChecklists({
                           >
                             <div className="flex items-start justify-between min-w-0">
                               <div className="truncate pr-2">
-                                <span className="inline-block text-[8.5px] bg-rose-600 text-white font-extrabold px-1.5 py-0.2 rounded-md uppercase tracking-wider mb-1">
+                                <span className="inline-block text-[8.5px] bg-rose-600 text-white font-extrabold px-1.5 py-0.2 rounded-md uppercase tracking-wider mb-1 flex items-center gap-1 w-fit">
+                                  <AlertTriangle className="h-2.5 w-2.5" />
                                   {o.tipo}
                                 </span>
                                 <h5 className="text-xs font-black text-slate-800 leading-tight truncate">
@@ -1612,7 +1625,13 @@ export default function ShiftsChecklists({
                           >
                             <div className="flex items-start justify-between min-w-0">
                               <div className="truncate pr-2">
-                                <span className="inline-block text-[8.5px] bg-amber-500 text-white font-extrabold px-1.5 py-0.2 rounded-md uppercase tracking-wider mb-1">
+                                <span className={`inline-block text-[8.5px] font-extrabold px-1.5 py-0.2 rounded-md uppercase tracking-wider mb-1 flex items-center gap-1 w-fit ${
+                                  e.tipo === "Manutenção" ? "bg-amber-500 text-white" :
+                                  e.tipo === "Reunião" ? "bg-blue-600 text-white" :
+                                  "bg-indigo-500 text-white"
+                                }`}>
+                                  {e.tipo === "Manutenção" && <Wrench className="h-2.5 w-2.5" />}
+                                  {e.tipo === "Reunião" && <UsersIcon className="h-2.5 w-2.5" />}
                                   {e.tipo}
                                 </span>
                                 <h5 className="text-xs font-black text-slate-800 leading-tight truncate break-words whitespace-normal font-sans">

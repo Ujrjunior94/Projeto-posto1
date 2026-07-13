@@ -132,6 +132,8 @@ export const INITIAL_STATE: AppState = {
         testeGerador: true,
       },
       status: "Fechado",
+      dayOfWeek: "Dia 12",
+      stationCnpj: "12.345.678/0001-99",
     },
     {
       id: "s2",
@@ -142,10 +144,58 @@ export const INITIAL_STATE: AppState = {
         limpezaPistas: true,
         usoEPIs: true,
         afericaoEquipamentosSeguranca: true,
-        testeGerador: false, // generator test pending
+        testeGerador: false,
       },
       status: "Em Andamento",
+      dayOfWeek: "Dia 13",
+      stationCnpj: "12.345.678/0001-99",
+      occurrences: [
+        {
+          id: "occ_mock_1",
+          tipo: "Atraso",
+          descricao: "Atraso de 15 minutos por conta de trânsito intenso na via principal.",
+          dataHora: "2026-07-13 06:15",
+        }
+      ]
     },
+    {
+      id: "s_evt_1",
+      data: "2026-07-15",
+      turno: "Evento Geral",
+      frentistaResponsavel: "Evento Geral",
+      checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+      status: "Planejado",
+      dayOfWeek: "Dia 15",
+      stationCnpj: "12.345.678/0001-99",
+      events: [
+        {
+          id: "evt_mock_1",
+          titulo: "Manutenção Preventiva Compressores",
+          tipo: "Manutenção",
+          descricao: "Troca de óleo e filtros dos compressores de ar da pista.",
+          horario: "10:00",
+        }
+      ]
+    },
+    {
+      id: "s_evt_2",
+      data: "2026-07-18",
+      turno: "Evento Geral",
+      frentistaResponsavel: "Evento Geral",
+      checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+      status: "Planejado",
+      dayOfWeek: "Dia 18",
+      stationCnpj: "12.345.678/0001-99",
+      events: [
+        {
+          id: "evt_mock_2",
+          titulo: "Reunião Alinhamento Semanal",
+          tipo: "Reunião",
+          descricao: "Reunião com toda a equipe para alinhamento de metas e segurança.",
+          horario: "14:30",
+        }
+      ]
+    }
   ],
   transactions: [
     // Historical Turn s1 completed transactions
@@ -363,5 +413,6 @@ export const INITIAL_STATE: AppState = {
       complianceStatus: "Regular",
       stationCnpj: "12.345.678/0001-99"
     }
-  ]
+  ],
+  shortages: []
 };

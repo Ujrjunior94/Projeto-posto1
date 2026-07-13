@@ -31,11 +31,32 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
   const [capacidadeMaxima, setCapacidadeMaxima] = useState(15000);
   const [volumeAtual, setVolumeAtual] = useState(8000);
   const [pontoCriticoAlerta, setPontoCriticoAlerta] = useState(2500);
+  const [cor, setCor] = useState("bg-indigo-500");
   const [observacoes, setObservacoes] = useState("");
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [fullEditing, setFullEditing] = useState(false);
+  
+  const [editIdentificador, setEditIdentificador] = useState("");
+  const [editCombustivel, setEditCombustivel] = useState<FuelType>("Gasolina Comum");
+  const [editCapacidade, setEditCapacidade] = useState(0);
   const [editVolume, setEditVolume] = useState<number>(0);
+  const [editPontoCritico, setEditPontoCritico] = useState(0);
+  const [editCor, setEditCor] = useState("");
   const [editObservacoes, setEditObservacoes] = useState<string>("");
+
+  const COLORS = [
+    { name: "Indigo", class: "bg-indigo-500" },
+    { name: "Sky", class: "bg-sky-500" },
+    { name: "Emerald", class: "bg-emerald-500" },
+    { name: "Amber", class: "bg-amber-500" },
+    { name: "Orange", class: "bg-orange-500" },
+    { name: "Rose", class: "bg-rose-500" },
+    { name: "Slate", class: "bg-slate-500" },
+    { name: "Purple", class: "bg-purple-500" },
+    { name: "Yellow", class: "bg-yellow-400" },
+    { name: "Red", class: "bg-red-600" },
+  ];
 
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
@@ -67,6 +88,7 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
       capacidadeMaxima: Number(capacidadeMaxima),
       volumeAtual: Number(volumeAtual),
       pontoCriticoAlerta: Number(pontoCriticoAlerta),
+      cor,
       observacoes,
     };
 
@@ -89,23 +111,55 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
 
   const startQuickUpdate = (tank: FuelTank) => {
     setEditingId(tank.id);
+    setFullEditing(false);
     setEditVolume(tank.volumeAtual);
     setEditObservacoes(tank.observacoes || "");
   };
 
-  const saveQuickUpdate = (tankId: string, maxCap: number) => {
+  const startFullUpdate = (tank: FuelTank) => {
+    setEditingId(tank.id);
+    setFullEditing(true);
+    setEditIdentificador(tank.identificador);
+    setEditCombustivel(tank.combustivel);
+    setEditCapacidade(tank.capacidadeMaxima);
+    setEditVolume(tank.volumeAtual);
+    setEditPontoCritico(tank.pontoCriticoAlerta);
+    setEditCor(tank.cor || "bg-indigo-500");
+    setEditObservacoes(tank.observacoes || "");
+  };
+
+  const saveUpdate = (tankId: string) => {
+    const targetTank = tanks.find(t => t.id === tankId);
+    if (!targetTank) return;
+
+    const maxCap = fullEditing ? editCapacidade : targetTank.capacidadeMaxima;
+
     if (editVolume > maxCap) {
       setError("O volume atualizado não pode ser maior que a capacidade máxima do tanque.");
       return;
     }
+
     const updated = tanks.map((t) => {
       if (t.id === tankId) {
+        if (fullEditing) {
+          return {
+            ...t,
+            identificador: editIdentificador,
+            combustivel: editCombustivel,
+            capacidadeMaxima: Number(editCapacidade),
+            volumeAtual: Number(editVolume),
+            pontoCriticoAlerta: Number(editPontoCritico),
+            cor: editCor,
+            observacoes: editObservacoes
+          };
+        }
         return { ...t, volumeAtual: Number(editVolume), observacoes: editObservacoes };
       }
       return t;
     });
     onUpdateTanks(updated);
     setEditingId(null);
+    setFullEditing(false);
     setSuccess("Tanque atualizado com sucesso!");
     setTimeout(() => setSuccess(""), 3000);
   };
@@ -228,6 +282,25 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
 
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Cor de Identificação
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {COLORS.map((c) => (
+                    <button
+                      key={c.class}
+                      type="button"
+                      onClick={() => setCor(c.class)}
+                      className={`h-6 rounded-lg border transition-all ${
+                        cor === c.class ? "ring-2 ring-offset-1 ring-indigo-500 border-transparent scale-110" : "border-slate-200"
+                      } ${c.class}`}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                   Observações / Notas do Tanque
                 </label>
                 <textarea
@@ -270,19 +343,28 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
                 const isCritical = tank.volumeAtual <= tank.pontoCriticoAlerta;
                 const pct = Math.min(100, Math.max(0, (tank.volumeAtual / tank.capacidadeMaxima) * 100));
 
-                let fluidBg = "from-indigo-500 to-indigo-600";
+                let fluidBg = tank.cor || "from-indigo-500 to-indigo-600";
+                
                 if (isCritical) {
                   fluidBg = "from-rose-500 to-rose-600";
-                } else if (pct < 40) {
-                  fluidBg = "from-amber-400 to-amber-500";
-                } else if (tank.combustivel.includes("Gasolina Comum")) {
-                  fluidBg = "from-yellow-400 to-amber-500";
-                } else if (tank.combustivel.includes("Gasolina Aditivada")) {
-                  fluidBg = "from-orange-500 to-red-600";
-                } else if (tank.combustivel.includes("Etanol")) {
-                  fluidBg = "from-sky-400 to-sky-500";
-                } else if (tank.combustivel.includes("Diesel")) {
-                  fluidBg = "from-emerald-500 to-emerald-600";
+                } else if (!tank.cor) {
+                  // Fallback to legacy logic if no color is set
+                  if (pct < 40) {
+                    fluidBg = "from-amber-400 to-amber-500";
+                  } else if (tank.combustivel.includes("Gasolina Comum")) {
+                    fluidBg = "from-yellow-400 to-amber-500";
+                  } else if (tank.combustivel.includes("Gasolina Aditivada")) {
+                    fluidBg = "from-orange-500 to-red-600";
+                  } else if (tank.combustivel.includes("Etanol")) {
+                    fluidBg = "from-sky-400 to-sky-500";
+                  } else if (tank.combustivel.includes("Diesel")) {
+                    fluidBg = "from-emerald-500 to-emerald-600";
+                  }
+                } else {
+                  // Use the selected color class
+                  // We need to handle the gradient part if it's just a solid color class
+                  const colorBase = tank.cor.replace('bg-', '').replace('-500', '');
+                  fluidBg = `from-${colorBase}-400 to-${colorBase}-600`;
                 }
 
                 return (
@@ -369,27 +451,92 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
                       <div className="pt-2 border-t border-slate-100">
                         {editingId === tank.id ? (
                           <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                value={editVolume}
-                                onChange={(e) => setEditVolume(Number(e.target.value))}
-                                className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-850 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold animate-fade-in"
-                                placeholder="Litragem"
-                              />
+                            {fullEditing ? (
+                              <div className="space-y-2 animate-fade-in">
+                                <div>
+                                  <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Identificador:</label>
+                                  <input
+                                    type="text"
+                                    value={editIdentificador}
+                                    onChange={(e) => setEditIdentificador(e.target.value)}
+                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Combustível:</label>
+                                  <select
+                                    value={editCombustivel}
+                                    onChange={(e) => setEditCombustivel(e.target.value as FuelType)}
+                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  >
+                                    {FUEL_TYPES.map(f => <option key={f} value={f}>{f}</option>)}
+                                  </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Capacidade:</label>
+                                    <input
+                                      type="number"
+                                      value={editCapacidade}
+                                      onChange={(e) => setEditCapacidade(Number(e.target.value))}
+                                      className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Ponto Crítico:</label>
+                                    <input
+                                      type="number"
+                                      value={editPontoCritico}
+                                      onChange={(e) => setEditPontoCritico(Number(e.target.value))}
+                                      className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Cor:</label>
+                                  <div className="flex flex-wrap gap-1">
+                                    {COLORS.map((c) => (
+                                      <button
+                                        key={c.class}
+                                        type="button"
+                                        onClick={() => setEditCor(c.class)}
+                                        className={`h-4 w-4 rounded-full border transition-all ${
+                                          editCor === c.class ? "ring-2 ring-offset-1 ring-indigo-500 border-transparent scale-110" : "border-slate-200"
+                                        } ${c.class}`}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div className="flex items-center gap-1 mt-1">
+                              <div className="flex-1">
+                                {!fullEditing && <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Volume:</label>}
+                                <input
+                                  type="number"
+                                  value={editVolume}
+                                  onChange={(e) => setEditVolume(Number(e.target.value))}
+                                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-850 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold animate-fade-in"
+                                  placeholder="Litragem"
+                                />
+                              </div>
                               <button
-                                onClick={() => saveQuickUpdate(tank.id, tank.capacidadeMaxima)}
-                                className="p-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition cursor-pointer shrink-0"
+                                onClick={() => saveUpdate(tank.id)}
+                                className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition cursor-pointer shrink-0 self-end"
                                 title="Salvar"
                               >
-                                <Save className="h-3 w-3" />
+                                <Save className="h-3.5 w-3.5" />
                               </button>
                               <button
-                                onClick={() => setEditingId(null)}
-                                className="p-1 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition cursor-pointer shrink-0"
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setFullEditing(false);
+                                }}
+                                className="p-1.5 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition cursor-pointer shrink-0 self-end"
                                 title="Cancelar"
                               >
-                                <X className="h-3 w-3" />
+                                <X className="h-3.5 w-3.5" />
                               </button>
                             </div>
                             <div>
@@ -414,12 +561,24 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
                                   <CheckCircle className="h-2.5 w-2.5" /> SEGURO
                                 </span>
                               )}
-                              <button
-                                onClick={() => startQuickUpdate(tank)}
-                                className="text-[11px] text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-0.5 cursor-pointer"
-                              >
-                                <Edit className="h-3 w-3" /> Ajustar
-                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => startQuickUpdate(tank)}
+                                  className="text-[10px] text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-0.5 cursor-pointer"
+                                  title="Ajuste rápido de volume"
+                                >
+                                  <Edit className="h-3 w-3" /> Vol
+                                </button>
+                                {!isReadOnly && (
+                                  <button
+                                    onClick={() => startFullUpdate(tank)}
+                                    className="text-[10px] text-slate-600 hover:text-indigo-700 font-bold flex items-center gap-0.5 cursor-pointer border-l border-slate-200 pl-2"
+                                    title="Editar todos os detalhes"
+                                  >
+                                    <Edit className="h-3 w-3" /> Editar
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             {tank.observacoes ? (
                               <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-slate-600 text-[10px] leading-snug italic">

@@ -17,6 +17,7 @@ import ReportsAdvanced from "./components/ReportsAdvanced";
 import CloudSyncPanel from "./components/CloudSyncPanel";
 import LMCManagement from "./components/LMCManagement";
 import AuditorLog from "./components/AuditorLog";
+import CashierShortage from "./components/CashierShortage";
 
 import {
   LayoutDashboard,
@@ -35,6 +36,7 @@ import {
   Lock,
   History,
   BookOpen,
+  AlertTriangle,
 } from "lucide-react";
 
 const STORAGE_KEY = "meu_posto_app_state";
@@ -154,6 +156,10 @@ export default function App() {
     setAppState((prev) => ({ ...prev, audits }));
   };
 
+  const handleUpdateShortages = (shortages: typeof appState.shortages) => {
+    setAppState((prev) => ({ ...prev, shortages }));
+  };
+
   const handleAddAuditLog = (actionType: string, target: string, details: string, status: string = "Regular") => {
     const newLog = {
       id: "log_" + Date.now() + "_" + Math.floor(Math.random() * 100),
@@ -202,6 +208,7 @@ export default function App() {
     { id: "caixa", name: "Leitura de Bicos", icon: ClipboardList, frentistaAllowed: true },
     { id: "escalas", name: "Escala & Checklists", icon: ClipboardList, frentistaAllowed: true },
     { id: "tanques", name: "Controle de Tanques", icon: Fuel, frentistaAllowed: false },
+    { id: "faltas", name: "Faltas de Caixa", icon: AlertTriangle, frentistaAllowed: true },
     { id: "bicos", name: "Bicos & Bombas", icon: Activity, frentistaAllowed: false },
     { id: "qualidade", name: "Qualidade ANP", icon: Thermometer, frentistaAllowed: false },
     { id: "lmc", name: "Livro LMC (ANP)", icon: BookOpen, frentistaAllowed: false },
@@ -455,6 +462,15 @@ export default function App() {
               onUpdateTransactions={handleUpdateTransactions}
               onUpdateClosings={handleUpdateClosings}
               onUpdateReconciliations={handleUpdateReconciliations}
+            />
+          )}
+
+          {activeTab === "faltas" && (
+            <CashierShortage
+              appState={appState}
+              userRole={currentUser.cargo}
+              onUpdateShortages={handleUpdateShortages}
+              onAddAuditLog={handleAddAuditLog}
             />
           )}
 

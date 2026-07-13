@@ -20,6 +20,117 @@ import {
 } from "lucide-react";
 import { FUEL_TYPES } from "./TanksManagement";
 
+export function getDensityCorrectionFactor(fuel: FuelType): number {
+  if (fuel === "Etanol") return 0.00084;
+  if (fuel.includes("Gasolina")) return 0.00085;
+  if (fuel.includes("Diesel")) return 0.00070;
+  return 0.00080;
+}
+
+export function calculateD20(densidadeMedida: number, temperaturaMedida: number, fuel: FuelType): number {
+  const factor = getDensityCorrectionFactor(fuel);
+  return densidadeMedida + factor * (temperaturaMedida - 20);
+}
+
+export interface FuelComplianceResult {
+  densidadeCorrigida: number;
+  densidadeMin: number;
+  densidadeMax: number;
+  densidadeOk: boolean;
+  teorOk: boolean;
+  aspectoOk: boolean;
+  impurezasOk: boolean;
+  conforme: boolean;
+  teorCalculadoOuEsperado: number;
+  teorMin: number;
+  teorMax: number;
+  mensagem: string;
+}
+
+export function checkFuelCompliance(
+  fuel: FuelType,
+  densidadeMedida: number,
+  temperaturaMedida: number,
+  teorInformado: number,
+  aspectoVisual: "Límpido e Isento" | "Turvo" | "Com Impurezas",
+  presencaImpurezas: boolean
+): FuelComplianceResult {
+  const d20 = calculateD20(densidadeMedida, temperaturaMedida, fuel);
+  
+  let densidadeMin = 0.7150;
+  let densidadeMax = 0.7750;
+  let teorMin = 0;
+  let teorMax = 0;
+  let teorCalculadoOuEsperado = 0;
+  let teorOk = true;
+  let mensagem = "";
+
+  if (fuel === "Etanol") {
+    densidadeMin = 0.8076;
+    densidadeMax = 0.8110;
+    const abv = 96.0 - 264.7 * (d20 - 0.8076);
+    teorCalculadoOuEsperado = Math.min(100, Math.max(0, Number(abv.toFixed(1))));
+    teorMin = 95.1;
+    teorMax = 96.0;
+    teorOk = teorCalculadoOuEsperado >= teorMin && teorCalculadoOuEsperado <= teorMax;
+  } else if (fuel.includes("Gasolina")) {
+    densidadeMin = 0.7150;
+    densidadeMax = 0.7750;
+    teorMin = 26.0; // Standard 27% ± 1%
+    teorMax = 28.0;
+    teorCalculadoOuEsperado = teorInformado;
+    teorOk = teorInformado >= teorMin && teorInformado <= teorMax;
+  } else if (fuel === "Diesel S10") {
+    densidadeMin = 0.8150;
+    densidadeMax = 0.8500;
+    teorCalculadoOuEsperado = 0;
+    teorOk = true;
+  } else if (fuel === "Diesel S500") {
+    densidadeMin = 0.8200;
+    densidadeMax = 0.8650;
+    teorCalculadoOuEsperado = 0;
+    teorOk = true;
+  }
+
+  const densidadeOk = d20 >= densidadeMin && d20 <= densidadeMax;
+  const aspectoOk = aspectoVisual === "Límpido e Isento";
+  const impurezasOk = !presencaImpurezas;
+
+  const conforme = densidadeOk && teorOk && aspectoOk && impurezasOk;
+
+  if (!conforme) {
+    const motivos: string[] = [];
+    if (!densidadeOk) motivos.push(`Densidade corrigida a 20°C (${d20.toFixed(4)} g/cm³) fora da faixa (${densidadeMin.toFixed(4)} - ${densidadeMax.toFixed(4)})`);
+    if (!teorOk) {
+      if (fuel === "Etanol") {
+        motivos.push(`Teor Alcoólico (${teorCalculadoOuEsperado.toFixed(1)}% v/v) fora do permitido (95.1% - 96.0%)`);
+      } else {
+        motivos.push(`Teor de Etanol (${teorCalculadoOuEsperado.toFixed(1)}%) fora do limite legal (26.0% - 28.0%)`);
+      }
+    }
+    if (!aspectoOk) motivos.push("Aspecto visual não é Límpido e Isento");
+    if (!impurezasOk) motivos.push("Presença de impurezas");
+    mensagem = "Não Conforme: " + motivos.join("; ");
+  } else {
+    mensagem = "Conforme: Combustível aprovado sob regulamentação ANP 2026.";
+  }
+
+  return {
+    densidadeCorrigida: Number(d20.toFixed(4)),
+    densidadeMin,
+    densidadeMax,
+    densidadeOk,
+    teorOk,
+    aspectoOk,
+    impurezasOk,
+    conforme,
+    teorCalculadoOuEsperado,
+    teorMin,
+    teorMax,
+    mensagem
+  };
+}
+
 interface ANPQualityControlProps {
   appState: AppState;
   userRole: string;
@@ -87,6 +198,10 @@ export default function ANPQualityControl({
     }
 
     const conforme = calDesvioMl >= -60 && calDesvioMl <= 60;
+    
+    const nozzle = nozzles.find(n => n.id === calNozzleId);
+    const precoPorLitro = nozzle ? nozzle.precoPorLitro : 0;
+    const valorReais = Number(calVolumeMedido) * precoPorLitro;
 
     const newCal: NozzleCalibration = {
       id: "cal_" + Date.now(),
@@ -96,6 +211,7 @@ export default function ANPQualityControl({
       desvioMl: Number(calDesvioMl),
       conforme,
       operadorResponsavel: calOperador || "Supervisor Geral",
+      valorReais,
     };
 
     onUpdateCalibrations([...calibrations, newCal]);
@@ -114,29 +230,14 @@ export default function ANPQualityControl({
     setError("");
     setSuccess("");
 
-    // Rules:
-    // 1. Gasoline can have up to 27% ethanol (official legal maximum)
-    // 2. Etanol must have between 95.1% and 96.0% alcohol content (v/v)
-    // 3. Aspect must be "Límpido e Isento"
-    // 4. No impurities allowed
-    
-    let ethanolOk = true;
-    let computedTeorOrAbv = 0;
-
-    if (qCombustivel.includes("Gasolina")) {
-      ethanolOk = qTeorEtanol <= 27;
-      computedTeorOrAbv = Number(qTeorEtanol);
-    } else if (qCombustivel === "Etanol") {
-      const d20 = qDensidade + 0.00084 * (qTemperatura - 20);
-      const abv = 96.0 - 264.7 * (d20 - 0.8076);
-      computedTeorOrAbv = Math.min(100, Math.max(0, Number(abv.toFixed(1))));
-      ethanolOk = computedTeorOrAbv >= 95.1 && computedTeorOrAbv <= 96.0;
-    }
-
-    const aspectOk = qAspecto === "Límpido e Isento";
-    const impuritiesOk = !qImpurezas;
-
-    const conforme = ethanolOk && aspectOk && impuritiesOk;
+    const comp = checkFuelCompliance(
+      qCombustivel,
+      Number(qDensidade),
+      Number(qTemperatura),
+      Number(qTeorEtanol),
+      qAspecto,
+      qImpurezas
+    );
 
     const newAudit: ANPQualityAudit = {
       id: "qa_" + Date.now(),
@@ -144,22 +245,31 @@ export default function ANPQualityControl({
       combustivel: qCombustivel,
       densidade: Number(qDensidade),
       temperatura: Number(qTemperatura),
-      teorEtanol: computedTeorOrAbv,
+      densidadeCorrigida: comp.densidadeCorrigida,
+      teorEtanol: comp.teorCalculadoOuEsperado,
       aspectoVisual: qAspecto,
       presencaImpurezas: qImpurezas,
-      conforme,
+      conforme: comp.conforme,
       responsavelTecnico: qResponsavel || "Químico Técnico",
     };
 
     onUpdateQualityAudits([...qualityAudits, newAudit]);
-    onAddAuditLog("CREATE", "Qualidade", `Emitiu laudo químico ANP para ${qCombustivel}. Status: ${conforme ? "Aprovado" : "Reprovado"}`, "Regular");
-
-    setSuccess(
-      conforme
-        ? "Laudo de Qualidade ANP gerado: Combustível em total CONFORMIDADE com portarias químicas."
-        : "Alerta: Laudo de qualidade reprovado! Envie notificação imediata à distribuidora."
+    onAddAuditLog(
+      "CREATE",
+      "Qualidade",
+      `Emitiu laudo químico ANP 2026 para ${qCombustivel}. D20: ${comp.densidadeCorrigida} g/cm³. Status: ${comp.conforme ? "CONFORME" : "REPROVADO"}`,
+      "Regular"
     );
-    setTimeout(() => setSuccess(""), 4500);
+
+    if (comp.conforme) {
+      setSuccess(
+        `Laudo ANP 2026 gerado: CONFORME! Massa específica corrigida a 20°C: ${comp.densidadeCorrigida.toFixed(4)} g/cm³ (faixa ideal: ${comp.densidadeMin.toFixed(4)} - ${comp.densidadeMax.toFixed(4)}).`
+      );
+    } else {
+      setError(
+        `ALERTA DE REPROVAÇÃO ANP: ${comp.mensagem}`
+      );
+    }
   };
 
   const handleCreateDelivery = (e: React.FormEvent) => {
@@ -242,6 +352,22 @@ export default function ANPQualityControl({
       ...prev,
       [id]: !prev[id],
     }));
+  };
+
+  const handleDeleteCalibration = (id: string) => {
+    if (confirm("Deseja realmente excluir esta aferição de bico?")) {
+      const filtered = calibrations.filter((c) => c.id !== id);
+      onUpdateCalibrations(filtered);
+      onAddAuditLog("DELETE", "Qualidade", `Excluiu aferição ID ${id}`, "Regular");
+    }
+  };
+
+  const handleDeleteQualityAudit = (id: string) => {
+    if (confirm("Deseja realmente excluir este laudo químico?")) {
+      const filtered = qualityAudits.filter((a) => a.id !== id);
+      onUpdateQualityAudits(filtered);
+      onAddAuditLog("DELETE", "Qualidade", `Excluiu laudo químico ID ${id}`, "Regular");
+    }
   };
 
   const filteredDeliveries = fuelDeliveries.filter((d) => d.stationCnpj === cnpjPosto);
@@ -398,15 +524,40 @@ export default function ANPQualityControl({
 
           {/* Table list Right */}
           <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-sm font-semibold text-slate-800">Histórico de Aferição de Bicos</h3>
-              <button
-                onClick={handleExportSelectedCSV}
-                className="px-3 py-1.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Exportar Selecionados (CSV)
-              </button>
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                <h3 className="text-sm font-semibold text-slate-800">Histórico de Aferição de Bicos</h3>
+                <button
+                  onClick={handleExportSelectedCSV}
+                  className="px-3 py-1.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Exportar Selecionados (CSV)
+                </button>
+              </div>
+
+              {/* Cumulative summary for selected calibrations */}
+              {Object.values(selectedCalibrations).filter(Boolean).length > 0 && (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase block">Total Selecionado</span>
+                    <span className="text-lg font-black text-indigo-700">
+                      R$ {calibrations
+                        .filter(c => selectedCalibrations[c.id])
+                        .reduce((acc, c) => acc + (c.valorReais || 0), 0)
+                        .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase block">Litros Totais</span>
+                    <span className="text-sm font-bold text-indigo-600">
+                      {calibrations
+                        .filter(c => selectedCalibrations[c.id])
+                        .reduce((acc, c) => acc + c.volumeMedido, 0)} L
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -422,9 +573,11 @@ export default function ANPQualityControl({
                     </th>
                     <th className="py-2.5 px-3">Data</th>
                     <th className="py-2.5 px-3">Bico</th>
+                    <th className="py-2.5 px-3">Valor (R$)</th>
                     <th className="py-2.5 px-3">Desvio Medido</th>
                     <th className="py-2.5 px-3">Veredicto</th>
                     <th className="py-2.5 px-3">Operador</th>
+                    <th className="py-2.5 px-3">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -455,6 +608,9 @@ export default function ANPQualityControl({
                                 Bico {b ? b.numeroBico : "Bico Geral"}
                               </span>
                             </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-700">
+                              R$ {(cal.valorReais || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
                             <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
                               {cal.desvioMl > 0 ? `+${cal.desvioMl}` : cal.desvioMl} mL
                             </td>
@@ -470,6 +626,15 @@ export default function ANPQualityControl({
                               </span>
                             </td>
                             <td className="py-2.5 px-3 text-slate-500">{cal.operadorResponsavel}</td>
+                            <td className="py-2.5 px-3 text-right">
+                              <button
+                                onClick={() => handleDeleteCalibration(cal.id)}
+                                className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                                title="Excluir Registro"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
                           </tr>
                         );
                       })
@@ -560,7 +725,122 @@ export default function ANPQualityControl({
                 </div>
               </div>
 
-              {qCombustivel === "Etanol" && (
+              {(() => {
+                const comp = checkFuelCompliance(
+                  qCombustivel,
+                  Number(qDensidade),
+                  Number(qTemperatura),
+                  Number(qTeorEtanol),
+                  qAspecto,
+                  qImpurezas
+                );
+                const factor = getDensityCorrectionFactor(qCombustivel);
+                
+                return (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 text-slate-700">
+                    <div className="text-[10px] font-black uppercase text-indigo-800 tracking-wide flex items-center gap-1">
+                      <Thermometer className="h-3.5 w-3.5 text-indigo-600" />
+                      Painel de Conformidade ANP 2026
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 bg-white border border-slate-100 p-2 rounded-lg leading-snug font-mono">
+                      Fórmula de Correção à Temperatura de Referência (20°C):
+                      <div className="text-slate-800 font-bold mt-1 text-[11px] text-center">
+                        D20 = Dt + {factor.toFixed(5)} × (t - 20)
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs leading-tight pt-1">
+                      <div>
+                        <span className="text-slate-400 text-[9px] uppercase font-bold block">D20 Corrigida</span>
+                        <span className="font-mono font-black text-slate-800 text-[13px]">
+                          {comp.densidadeCorrigida.toFixed(4)} g/cm³
+                        </span>
+                        <span className="text-slate-400 text-[9px] block">
+                          ({(comp.densidadeCorrigida * 1000).toFixed(1)} kg/m³)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-[9px] uppercase font-bold block">Limites Permitidos</span>
+                        <span className="font-mono font-bold text-slate-600 text-[11px] block mt-0.5">
+                          {comp.densidadeMin.toFixed(4)} a {comp.densidadeMax.toFixed(4)}
+                        </span>
+                        <span className="text-slate-400 text-[9px] block">
+                          ({(comp.densidadeMin * 1000).toFixed(0)} - {(comp.densidadeMax * 1000).toFixed(0)} kg/m³)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress bar visualizer for density */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[8px] text-slate-400 uppercase font-bold">
+                        <span>Min: {comp.densidadeMin.toFixed(4)}</span>
+                        <span className="font-mono text-slate-600 font-bold">D20: {comp.densidadeCorrigida.toFixed(4)}</span>
+                        <span>Max: {comp.densidadeMax.toFixed(4)}</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden relative border border-slate-100">
+                        <div className="absolute inset-0 bg-rose-200/50" />
+                        <div className="absolute left-[25%] right-[25%] top-0 bottom-0 bg-emerald-100" />
+                        
+                        {(() => {
+                          const range = comp.densidadeMax - comp.densidadeMin;
+                          const relativeVal = comp.densidadeCorrigida - comp.densidadeMin;
+                          let pct = range > 0 ? (relativeVal / range) * 50 + 25 : 50;
+                          pct = Math.min(100, Math.max(0, pct));
+                          return (
+                            <div 
+                              style={{ left: `${pct}%` }} 
+                              className={`absolute -top-0.5 -bottom-0.5 w-1.5 rounded-full shadow-xs -translate-x-1/2 transition-all duration-300 ${
+                                comp.densidadeOk ? "bg-emerald-600 ring-2 ring-emerald-200" : "bg-rose-600 ring-2 ring-rose-200 animate-pulse"
+                              }`}
+                            />
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Specific analysis depending on fuel */}
+                    <div className="pt-2 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-[11px] leading-tight">
+                      <div>
+                        <span className="text-slate-400 text-[9px] uppercase font-bold block">
+                          {qCombustivel === "Etanol" ? "Teor Alcoólico" : qCombustivel.includes("Gasolina") ? "Teor de Etanol" : "Biodiesel/Aditivo"}
+                        </span>
+                        <span className={`font-mono font-black ${comp.teorOk ? "text-emerald-600" : "text-rose-600"}`}>
+                          {qCombustivel === "Etanol" 
+                            ? `${comp.teorCalculadoOuEsperado.toFixed(1)}% v/v`
+                            : qCombustivel.includes("Gasolina")
+                              ? `${comp.teorCalculadoOuEsperado.toFixed(1)}% v/v`
+                              : "Isento / Conforme"
+                          }
+                        </span>
+                        {qCombustivel.includes("Gasolina") && (
+                          <span className="text-[9px] text-slate-400 block mt-0.5">
+                            Faixa legal: 26% a 28%
+                          </span>
+                        )}
+                        {qCombustivel === "Etanol" && (
+                          <span className="text-[9px] text-slate-400 block mt-0.5">
+                            Faixa legal: 95.1% a 96.0%
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 text-[9px] uppercase font-bold block">Status Real</span>
+                        <span className={`font-black uppercase px-1.5 py-0.5 rounded text-[8.5px] border inline-block mt-1 ${
+                          comp.conforme
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                            : "bg-rose-100 text-rose-800 border-rose-200 animate-pulse"
+                        }`}>
+                          {comp.conforme ? "✓ CONFORME" : "⚠ REPROVADO"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {false && (
                 <div className="bg-sky-50/70 border border-sky-100 rounded-xl p-3.5 space-y-2 text-slate-700">
                   <div className="text-[10px] font-black uppercase text-sky-800 tracking-wide flex items-center gap-1">
                     <Thermometer className="h-3.5 w-3.5 text-sky-600 animate-pulse" />
@@ -648,6 +928,7 @@ export default function ANPQualityControl({
                     <th className="py-2.5 px-3">Etanol</th>
                     <th className="py-2.5 px-3">Veredicto</th>
                     <th className="py-2.5 px-3">Resp. Técnico</th>
+                    <th className="py-2.5 px-3">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -664,7 +945,10 @@ export default function ANPQualityControl({
                           <td className="py-2.5 px-3 font-semibold text-slate-600">{audit.data.split("-").reverse().join("/")}</td>
                           <td className="py-2.5 px-3 font-bold text-slate-800">{audit.combustivel}</td>
                           <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700">
-                            Dens: {audit.densidade} | Temp: {audit.temperatura}°C
+                            <div>Medida: {audit.densidade.toFixed(4)} ({audit.temperatura}°C)</div>
+                            <div className="font-semibold text-indigo-700 text-[10.5px]">
+                              D20: {audit.densidadeCorrigida ? audit.densidadeCorrigida.toFixed(4) : calculateD20(audit.densidade, audit.temperatura, audit.combustivel).toFixed(4)} g/cm³
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
                             {audit.combustivel.includes("Gasolina") ? `${audit.teorEtanol}%` : audit.combustivel === "Etanol" ? `${audit.teorEtanol}% v/v` : "—"}
@@ -681,6 +965,15 @@ export default function ANPQualityControl({
                             </span>
                           </td>
                           <td className="py-2.5 px-3 text-slate-500">{audit.responsavelTecnico}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              onClick={() => handleDeleteQualityAudit(audit.id)}
+                              className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                              title="Excluir Registro"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
                         </tr>
                       ))
                   )}

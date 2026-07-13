@@ -25,6 +25,7 @@ export interface FuelTank {
   capacidadeMaxima: number; // in liters
   volumeAtual: number; // in liters
   pontoCriticoAlerta: number; // min safe level in liters
+  cor?: string; // Hex color or Tailwind class for tank identification
   observacoes?: string; // observations / notes per tank
 }
 
@@ -113,6 +114,17 @@ export interface ShiftReconciliation {
   dataFechamento: string;
 }
 
+export interface ShiftShortage {
+  id: string;
+  shiftId: string;
+  data: string;
+  valorTotalFalta: number;
+  funcionariosEnvolvidos: string[]; // Lista de nomes de funcionários no turno
+  rateioPorFuncionario: number; // valorTotalFalta / funcionariosEnvolvidos.length
+  status: "Pendente" | "Pago" | "Descontado";
+  observacoes?: string;
+}
+
 // Aferição de bicos (testes físicos de vazão de 20 litros)
 export interface NozzleCalibration {
   id: string;
@@ -122,6 +134,7 @@ export interface NozzleCalibration {
   desvioMl: number; // allowed deviation is +-60ml (records from -100 to +100ml)
   conforme: boolean; // desvioMl between -60 and +60
   operadorResponsavel: string;
+  valorReais?: number; // valor da aferição em R$ (precoPorLitro * volumeMedido)
 }
 
 // Controle de qualidade ANP diário
@@ -131,6 +144,7 @@ export interface ANPQualityAudit {
   combustivel: FuelType;
   densidade: number; // g/cm³ (e.g., 0.720 to 0.775)
   temperatura: number; // °C (e.g., 20 to 35)
+  densidadeCorrigida?: number; // g/cm³ corrected to 20°C according to ANP 2026
   teorEtanol: number; // % (ANP limit of 27% for Gasoline, ignore or N/A for diesel/pure ethanol)
   aspectoVisual: "Límpido e Isento" | "Turvo" | "Com Impurezas";
   presencaImpurezas: boolean;
@@ -221,5 +235,6 @@ export interface AppState {
   systemCredentials: SystemCredential[];
   deliveries: FuelDelivery[];
   audits: ActivityLog[];
+  shortages: ShiftShortage[];
 }
 
