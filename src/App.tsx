@@ -199,7 +199,7 @@ export default function App() {
   // Sidebar Menu Tabs Definitions with Permission guards
   const navigationItems = [
     { id: "dashboard", name: "Dashboard", icon: LayoutDashboard, frentistaAllowed: true },
-    { id: "caixa", name: "Caixa & Turnos", icon: DollarSign, frentistaAllowed: true },
+    { id: "caixa", name: "Leitura de Bicos", icon: ClipboardList, frentistaAllowed: true },
     { id: "escalas", name: "Escala & Checklists", icon: ClipboardList, frentistaAllowed: true },
     { id: "tanques", name: "Controle de Tanques", icon: Fuel, frentistaAllowed: false },
     { id: "bicos", name: "Bicos & Bombas", icon: Activity, frentistaAllowed: false },

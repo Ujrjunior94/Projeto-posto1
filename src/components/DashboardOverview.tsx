@@ -13,21 +13,13 @@ interface DashboardOverviewProps {
 }
 
 export default function DashboardOverview({ appState, onNavigate }: DashboardOverviewProps) {
-  const { tanks, shifts, transactions, calibrations, qualityAudits } = appState;
+  const { tanks, shifts, nozzleClosings = [], qualityAudits } = appState;
 
   // Active shift
   const activeShift = shifts.find((s) => s.status === "Em Andamento");
 
-  // Sum total transactions for current system
-  const totalRevenue = transactions
-    .filter((t) => t.tipo === "Receita")
-    .reduce((sum, t) => sum + t.valor, 0);
-
-  const totalExpense = transactions
-    .filter((t) => t.tipo === "Despesa")
-    .reduce((sum, t) => sum + t.valor, 0);
-
-  const netBalance = totalRevenue - totalExpense;
+  // Sum total liters sold
+  const totalLitersSold = nozzleClosings.reduce((sum, c) => sum + (c.litrosVendidos || 0), 0);
 
   // Critical stock tanks check
   const criticalTanks = tanks.filter((t) => t.volumeAtual <= t.pontoCriticoAlerta);
@@ -43,20 +35,20 @@ export default function DashboardOverview({ appState, onNavigate }: DashboardOve
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition">
           <div className="absolute top-0 right-0 p-4 opacity-15 text-indigo-600 group-hover:scale-110 transition">
-            <TrendingUp className="h-16 w-16" />
+            <Droplet className="h-16 w-16" />
           </div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faturamento de Caixa</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Volume Total Vendido</p>
           <p className="text-2xl font-bold text-slate-900 mt-2 font-display">
-            R$ {totalRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {totalLitersSold.toLocaleString("pt-BR")} L
           </p>
           <p className="text-xs text-slate-500 mt-1">
-            Total bruto registrado no sistema
+            Soma acumulada de encerrantes de bico
           </p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition">
           <div className="absolute top-0 right-0 p-4 opacity-15 text-emerald-600 group-hover:scale-110 transition">
-            <Droplet className="h-16 w-16" />
+            <Fuel className="h-16 w-16" />
           </div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Combustível Estocado</p>
           <p className="text-2xl font-bold text-slate-900 mt-2 font-display">
@@ -120,26 +112,34 @@ export default function DashboardOverview({ appState, onNavigate }: DashboardOve
             const isCritical = tank.volumeAtual <= tank.pontoCriticoAlerta;
             
             // Define colors of the fluid wave
-            let fluidBg = "bg-indigo-600";
+            let fluidBg = "from-indigo-500 to-indigo-600";
             let fluidColorText = "text-indigo-600";
             let borderColor = "border-slate-200";
             
             if (isCritical) {
-              fluidBg = "bg-rose-600";
+              fluidBg = "from-rose-500 to-rose-600";
               fluidColorText = "text-rose-600 animate-pulse";
               borderColor = "border-rose-200";
             } else if (pct < 40) {
-              fluidBg = "bg-amber-500";
+              fluidBg = "from-amber-400 to-amber-500";
               fluidColorText = "text-amber-600";
               borderColor = "border-amber-200";
+            } else if (tank.combustivel.includes("Gasolina Comum")) {
+              fluidBg = "from-yellow-400 to-amber-500";
+              fluidColorText = "text-amber-600";
+              borderColor = "border-amber-200";
+            } else if (tank.combustivel.includes("Gasolina Aditivada")) {
+              fluidBg = "from-orange-500 to-red-600";
+              fluidColorText = "text-orange-600";
+              borderColor = "border-orange-250";
             } else if (tank.combustivel.includes("Etanol")) {
-              fluidBg = "bg-emerald-500";
-              fluidColorText = "text-emerald-600";
-              borderColor = "border-emerald-200";
+              fluidBg = "from-sky-400 to-sky-500";
+              fluidColorText = "text-sky-600";
+              borderColor = "border-sky-200";
             } else if (tank.combustivel.includes("Diesel")) {
-              fluidBg = "bg-slate-500";
-              fluidColorText = "text-slate-600";
-              borderColor = "border-slate-300";
+              fluidBg = "from-emerald-500 to-emerald-600";
+              fluidColorText = "text-emerald-600";
+              borderColor = "border-emerald-250";
             }
 
             return (
@@ -157,33 +157,37 @@ export default function DashboardOverview({ appState, onNavigate }: DashboardOve
                   </h4>
                 </div>
 
-                {/* Simulated Fluid Tube Graphic */}
-                <div className="w-24 h-40 bg-slate-100 border-4 border-slate-200 rounded-2xl relative overflow-hidden my-4 shadow-inner">
-                  {/* Grid Lines */}
-                  <div className="absolute inset-0 flex flex-col justify-between p-2 pointer-events-none opacity-40 text-[9px] text-slate-600 font-mono z-10">
-                    <span>100%</span>
-                    <span>75%</span>
-                    <span>50%</span>
-                    <span>25%</span>
-                    <span>0%</span>
-                  </div>
+                {/* Simulated Fluid Cylinder Graphic */}
+                <div className="w-24 h-40 bg-slate-100 border-2 border-slate-300 rounded-b-[20px] relative overflow-hidden my-4 shadow-inner flex flex-col justify-end">
+                  {/* Cylinder Top Rim */}
+                  <div className="absolute top-0 left-0 right-0 h-4 bg-slate-200 border-b border-slate-300/60 rounded-full z-20 shadow-sm" />
+                  
+                  {/* Cylinder Glass Gloss reflection */}
+                  <div className="absolute inset-y-0 left-3.5 w-2 bg-white/20 z-20 pointer-events-none" />
 
                   {/* Liquid Body */}
                   <div
-                    className={`absolute bottom-0 left-0 right-0 transition-all duration-700 ease-out ${fluidBg}`}
+                    className={`absolute bottom-0 left-0 right-0 rounded-b-[18px] bg-gradient-to-t ${fluidBg} transition-all duration-1000 ease-in-out`}
                     style={{ height: `${pct}%` }}
                   >
-                    {/* Simulated Liquid Wave animated header */}
+                    {/* Liquid Top Surface Oval */}
                     {pct > 0 && (
-                      <div className="absolute -top-1.5 left-0 right-0 h-3 overflow-hidden">
-                        <div className="w-[200%] h-full opacity-50 liquid-wave bg-white/20 absolute top-0 left-0"></div>
-                        <div className="w-[200%] h-full liquid-wave bg-black/10 absolute top-0 left-0"></div>
+                      <div 
+                        className="absolute -top-1.5 left-0 right-0 h-3 bg-white/30 rounded-full z-10"
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.3)' }}
+                      />
+                    )}
+
+                    {/* Liquid Wave Animation Overlay */}
+                    {pct > 0 && (
+                      <div className="absolute inset-0 overflow-hidden opacity-35">
+                        <div className="w-[200%] h-full liquid-wave bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1200 120%22 preserveAspectRatio=%22none%22><path d=%22M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,42.4V0Z%22 fill=%22%23ffffff%22></path></svg>')] bg-repeat-x bg-[length:300px_30px] absolute -top-1 left-0" />
                       </div>
                     )}
                   </div>
 
-                  {/* Percentage float overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center font-bold text-sm text-slate-900 drop-shadow-sm z-20">
+                  {/* Percentage overlay indicator */}
+                  <div className="absolute inset-0 flex items-center justify-center font-bold text-sm text-slate-800 drop-shadow-xs z-20">
                     {Math.round(pct)}%
                   </div>
                 </div>

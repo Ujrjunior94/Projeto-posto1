@@ -25,6 +25,7 @@ export interface FuelTank {
   capacidadeMaxima: number; // in liters
   volumeAtual: number; // in liters
   pontoCriticoAlerta: number; // min safe level in liters
+  observacoes?: string; // observations / notes per tank
 }
 
 export interface Nozzle {
@@ -50,6 +51,7 @@ export interface ShiftOccurrence {
   tipo: "Atraso" | "Falta" | "Atestado" | "Dobra" | "Problema na Pista" | "Outro";
   descricao: string;
   dataHora: string; // YYYY-MM-DD HH:MM
+  imagem?: string; // Attached image (Base64 or URL)
 }
 
 export interface ShiftEvent {

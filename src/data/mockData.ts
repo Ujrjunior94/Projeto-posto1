@@ -46,6 +46,7 @@ export const INITIAL_STATE: AppState = {
       capacidadeMaxima: 15000,
       volumeAtual: 10500,
       pontoCriticoAlerta: 2500,
+      observacoes: "Última limpeza interna realizada em março de 2026. Filtros em ótimo estado.",
     },
     {
       id: "t2",
@@ -54,6 +55,7 @@ export const INITIAL_STATE: AppState = {
       capacidadeMaxima: 10000,
       volumeAtual: 4200,
       pontoCriticoAlerta: 2000,
+      observacoes: "Manutenção preventiva agendada para 20/07/2026 para drenar condensação.",
     },
     {
       id: "t3",
@@ -62,6 +64,7 @@ export const INITIAL_STATE: AppState = {
       capacidadeMaxima: 15000,
       volumeAtual: 12000,
       pontoCriticoAlerta: 2500,
+      observacoes: "Abastecimento recente feito com laudo 100% conforme portaria ANP.",
     },
     {
       id: "t4",
@@ -70,6 +73,7 @@ export const INITIAL_STATE: AppState = {
       capacidadeMaxima: 20000,
       volumeAtual: 14500,
       pontoCriticoAlerta: 3000,
+      observacoes: "Válvulas e sensores de telemetria sem nenhuma ocorrência.",
     },
     {
       id: "t5",
@@ -78,6 +82,7 @@ export const INITIAL_STATE: AppState = {
       capacidadeMaxima: 10000,
       volumeAtual: 1500, // Trigger warning
       pontoCriticoAlerta: 2000,
+      observacoes: "ATENÇÃO: Nível crítico de estoque. Solicitar pedido urgente à distribuidora.",
     },
   ],
   nozzles: [

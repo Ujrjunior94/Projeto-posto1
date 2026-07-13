@@ -22,6 +22,10 @@ import {
   Brush,
   Download,
   AlertTriangle,
+  Camera,
+  UploadCloud,
+  X,
+  Eye,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 
@@ -110,6 +114,9 @@ export default function ShiftsChecklists({
   const [occType, setOccType] = useState<"Atraso" | "Falta" | "Atestado" | "Dobra" | "Problema na Pista" | "Outro">("Atraso");
   const [occDesc, setOccDesc] = useState("");
   const [occTime, setOccTime] = useState("12:00");
+  const [occImage, setOccImage] = useState<string>("");
+  const [isDragging, setIsDragging] = useState(false);
+  const [selectedOccImage, setSelectedOccImage] = useState<string | null>(null);
 
   const [showAddEventForm, setShowAddEventForm] = useState(false);
   const [evtTitle, setEvtTitle] = useState("");
@@ -128,6 +135,21 @@ export default function ShiftsChecklists({
       setOccShiftId("");
     }
   }, [selectedDayDayStr, shifts, cnpjPosto]);
+
+  const handleFileChange = (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Por favor, selecione apenas arquivos de imagem.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setOccImage(e.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSaveOccurrence = (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,6 +170,7 @@ export default function ShiftsChecklists({
       tipo: occType,
       descricao: occDesc,
       dataHora: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${selectedDayDayStr.replace("Dia ", "")} ${occTime}`,
+      imagem: occImage || undefined,
     };
 
     const updatedShifts = shifts.map((s) => {
@@ -170,6 +193,8 @@ export default function ShiftsChecklists({
 
     // Reset form
     setOccDesc("");
+    setOccImage("");
+    setIsDragging(false);
     setShowAddOccurrenceForm(false);
   };
 
@@ -1248,8 +1273,8 @@ export default function ShiftsChecklists({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="col-span-1">
                         <label className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-1">Horário</label>
                         <input
                           type="time"
@@ -1258,32 +1283,136 @@ export default function ShiftsChecklists({
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none"
                         />
                       </div>
-                      <div className="flex items-end gap-1.5">
-                        <button
-                          type="submit"
-                          className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-[10px] py-1.5 px-2.5 rounded-xl transition cursor-pointer shadow-sm text-center"
-                        >
-                          Salvar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowAddOccurrenceForm(false)}
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] py-1.5 px-2.5 rounded-xl transition cursor-pointer"
-                        >
-                          Voltar
-                        </button>
+                      <div className="col-span-2">
+                        <label className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-1">Motivo / Observações</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Chegou 40 min atrasado por ônibus"
+                          value={occDesc}
+                          onChange={(e) => setOccDesc(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none"
+                        />
                       </div>
                     </div>
 
+                    {/* Image Attachment Drop Zone */}
                     <div>
-                      <label className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-1">Motivo / Observações</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Chegou 40 min atrasado por quebra de ônibus"
-                        value={occDesc}
-                        onChange={(e) => setOccDesc(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 outline-none"
-                      />
+                      <label className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                        Anexar Imagem de Evidência
+                      </label>
+                      
+                      {occImage ? (
+                        <div className="relative border border-slate-200 rounded-xl p-2 bg-slate-50 flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-lg overflow-hidden border border-slate-100 bg-white shrink-0">
+                            <img
+                              src={occImage}
+                              alt="Anexo selecionado"
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold text-emerald-600 truncate">Imagem anexada!</p>
+                            <button
+                              type="button"
+                              onClick={() => setOccImage("")}
+                              className="text-[9px] text-rose-600 hover:text-rose-700 font-bold flex items-center gap-0.5 mt-0.5 cursor-pointer"
+                            >
+                              <Trash2 className="h-3 w-3" /> Remover imagem
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsDragging(true);
+                          }}
+                          onDragLeave={() => setIsDragging(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setIsDragging(false);
+                            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                              handleFileChange(e.dataTransfer.files[0]);
+                            }
+                          }}
+                          className={`border-2 border-dashed rounded-xl p-3 text-center transition flex flex-col items-center justify-center cursor-pointer ${
+                            isDragging
+                              ? "border-indigo-500 bg-indigo-50/40"
+                              : "border-slate-200 hover:border-indigo-400 bg-slate-50/50 hover:bg-slate-50"
+                          }`}
+                          onClick={() => document.getElementById("occ-file-input")?.click()}
+                        >
+                          <input
+                            id="occ-file-input"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleFileChange(e.target.files[0]);
+                              }
+                            }}
+                          />
+                          <UploadCloud className={`h-6 w-6 mb-1 ${isDragging ? "text-indigo-600" : "text-slate-400 animate-bounce"}`} />
+                          <p className="text-[10px] font-bold text-slate-600">
+                            Arraste ou clique para anexar foto
+                          </p>
+                          <p className="text-[8px] text-slate-400 mt-0.5">
+                            Suporta PNG, JPG ou GIF
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Presets stamps */}
+                      {!occImage && (
+                        <div className="mt-1.5 space-y-1">
+                          <span className="text-[8px] text-slate-400 uppercase font-black block">Estampas para Teste Rápido:</span>
+                          <div className="flex flex-wrap gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setOccImage("https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=400&auto=format&fit=crop&q=60")}
+                              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 font-medium text-[8px] border border-slate-200 transition cursor-pointer"
+                            >
+                              📄 Laudo/Atestado
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOccImage("https://images.unsplash.com/photo-1527018601619-a508a2be00cd?w=400&auto=format&fit=crop&q=60")}
+                              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 font-medium text-[8px] border border-slate-200 transition cursor-pointer"
+                            >
+                              ⛽ Vazamento/Pista
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOccImage("https://images.unsplash.com/photo-1508962914676-134849a727f0?w=400&auto=format&fit=crop&q=60")}
+                              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 font-medium text-[8px] border border-slate-200 transition cursor-pointer"
+                            >
+                              ⏰ Ônibus Atrasado
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action buttons at the bottom of the form */}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="submit"
+                        className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-[10px] py-2 rounded-xl transition cursor-pointer shadow-sm text-center"
+                      >
+                        Salvar Ocorrência
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOccImage("");
+                          setShowAddOccurrenceForm(false);
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] py-2 px-3 rounded-xl transition cursor-pointer"
+                      >
+                        Voltar
+                      </button>
                     </div>
                   </form>
                 ) : (
@@ -1337,6 +1466,28 @@ export default function ShiftsChecklists({
                                 {o.dataHora ? o.dataHora.split(" ")[1] || o.dataHora : "N/I"}
                               </span>
                             </div>
+
+                            {o.imagem && (
+                              <div className="mt-1.5 pt-1.5 border-t border-rose-200/40">
+                                <span className="text-[8px] uppercase tracking-wider text-rose-800/60 font-black block mb-1">
+                                  📸 Evidência Anexa:
+                                </span>
+                                <div 
+                                  onClick={() => setSelectedOccImage(o.imagem!)}
+                                  className="relative w-full h-20 rounded-lg overflow-hidden border border-rose-200 bg-white cursor-pointer hover:border-rose-400 transition group/thumb"
+                                >
+                                  <img
+                                    src={o.imagem}
+                                    alt="Foto da ocorrência"
+                                    className="w-full h-full object-cover group-hover/thumb:scale-105 transition duration-300"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/thumb:opacity-100 transition flex items-center justify-center text-white text-[9px] font-bold">
+                                    <Eye className="h-3.5 w-3.5 mr-1" /> VISUALIZAR
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))
                       );
@@ -1835,6 +1986,41 @@ export default function ShiftsChecklists({
                     );
                   })
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal for Occurrence Image evidence */}
+      {selectedOccImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/85 backdrop-blur-xs transition-opacity duration-300">
+          <div className="relative max-w-lg w-full bg-white rounded-3xl p-5 shadow-2xl flex flex-col items-center gap-3 border border-slate-100">
+            <button
+              onClick={() => setSelectedOccImage(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+              title="Fechar visualização"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider self-start pb-2 border-b border-slate-100 w-full flex items-center gap-1.5">
+              <Camera className="h-4 w-4 text-rose-500" />
+              Evidência Fotográfica da Ocorrência
+            </h4>
+            <div className="w-full h-80 rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center relative">
+              <img
+                src={selectedOccImage}
+                alt="Evidência ampliada"
+                className="max-h-full max-w-full object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="w-full flex justify-end pt-1">
+              <button
+                onClick={() => setSelectedOccImage(null)}
+                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>

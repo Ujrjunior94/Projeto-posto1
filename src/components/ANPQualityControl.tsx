@@ -116,9 +116,23 @@ export default function ANPQualityControl({
 
     // Rules:
     // 1. Gasoline can have up to 27% ethanol (official legal maximum)
-    // 2. Aspect must be "Límpido e Isento"
-    // 3. No impurities allowed
-    const ethanolOk = qCombustivel.includes("Gasolina") ? qTeorEtanol <= 27 : true;
+    // 2. Etanol must have between 95.1% and 96.0% alcohol content (v/v)
+    // 3. Aspect must be "Límpido e Isento"
+    // 4. No impurities allowed
+    
+    let ethanolOk = true;
+    let computedTeorOrAbv = 0;
+
+    if (qCombustivel.includes("Gasolina")) {
+      ethanolOk = qTeorEtanol <= 27;
+      computedTeorOrAbv = Number(qTeorEtanol);
+    } else if (qCombustivel === "Etanol") {
+      const d20 = qDensidade + 0.00084 * (qTemperatura - 20);
+      const abv = 96.0 - 264.7 * (d20 - 0.8076);
+      computedTeorOrAbv = Math.min(100, Math.max(0, Number(abv.toFixed(1))));
+      ethanolOk = computedTeorOrAbv >= 95.1 && computedTeorOrAbv <= 96.0;
+    }
+
     const aspectOk = qAspecto === "Límpido e Isento";
     const impuritiesOk = !qImpurezas;
 
@@ -130,7 +144,7 @@ export default function ANPQualityControl({
       combustivel: qCombustivel,
       densidade: Number(qDensidade),
       temperatura: Number(qTemperatura),
-      teorEtanol: qCombustivel.includes("Gasolina") ? Number(qTeorEtanol) : 0,
+      teorEtanol: computedTeorOrAbv,
       aspectoVisual: qAspecto,
       presencaImpurezas: qImpurezas,
       conforme,
@@ -546,6 +560,49 @@ export default function ANPQualityControl({
                 </div>
               </div>
 
+              {qCombustivel === "Etanol" && (
+                <div className="bg-sky-50/70 border border-sky-100 rounded-xl p-3.5 space-y-2 text-slate-700">
+                  <div className="text-[10px] font-black uppercase text-sky-800 tracking-wide flex items-center gap-1">
+                    <Thermometer className="h-3.5 w-3.5 text-sky-600 animate-pulse" />
+                    Cálculo Grau Alcoólico (v/v%)
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] leading-tight pt-1">
+                    <div>
+                      <span className="text-slate-400 text-[9px] uppercase font-bold block">D20 Corrigida</span>
+                      <span className="font-mono font-bold text-slate-800">
+                        {(qDensidade + 0.00084 * (qTemperatura - 20)).toFixed(4)} g/cm³
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[9px] uppercase font-bold block">Teor Alcoólico</span>
+                      <span className={`font-mono font-black ${
+                        (96.0 - 264.7 * ((qDensidade + 0.00084 * (qTemperatura - 20)) - 0.8076)) >= 95.1 &&
+                        (96.0 - 264.7 * ((qDensidade + 0.00084 * (qTemperatura - 20)) - 0.8076)) <= 96.0
+                          ? "text-emerald-600"
+                          : "text-rose-600"
+                      }`}>
+                        {Math.min(100, Math.max(0, Number((96.0 - 264.7 * ((qDensidade + 0.00084 * (qTemperatura - 20)) - 0.8076)).toFixed(1))))}% v/v
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-sky-100/50 flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400 font-medium">Status da Portaria ANP:</span>
+                    <span className={`font-black uppercase px-2 py-0.5 rounded text-[9px] ${
+                      (96.0 - 264.7 * ((qDensidade + 0.00084 * (qTemperatura - 20)) - 0.8076)) >= 95.1 &&
+                      (96.0 - 264.7 * ((qDensidade + 0.00084 * (qTemperatura - 20)) - 0.8076)) <= 96.0
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        : "bg-rose-100 text-rose-800 border border-rose-200 animate-pulse"
+                    }`}>
+                      {(96.0 - 264.7 * ((qDensidade + 0.00084 * (qTemperatura - 20)) - 0.8076)) >= 95.1 &&
+                      (96.0 - 264.7 * ((qDensidade + 0.00084 * (qTemperatura - 20)) - 0.8076)) <= 96.0
+                        ? "CONFORME (95.1% - 96.0%)"
+                        : "REPROVADO"
+                      }
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Químico Responsável *</label>
                 <input
@@ -610,7 +667,7 @@ export default function ANPQualityControl({
                             Dens: {audit.densidade} | Temp: {audit.temperatura}°C
                           </td>
                           <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                            {audit.combustivel.includes("Gasolina") ? `${audit.teorEtanol}%` : "—"}
+                            {audit.combustivel.includes("Gasolina") ? `${audit.teorEtanol}%` : audit.combustivel === "Etanol" ? `${audit.teorEtanol}% v/v` : "—"}
                           </td>
                           <td className="py-2.5 px-3">
                             <span
