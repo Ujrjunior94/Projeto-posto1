@@ -4,27 +4,52 @@
  */
 
 import React, { useState } from "react";
-import { AppState, NozzleCalibration, ANPQualityAudit, FuelType } from "../types";
-import { Thermometer, ShieldAlert, CheckCircle, Activity, Plus, Gauge, Sparkles, AlertTriangle } from "lucide-react";
+import { AppState, NozzleCalibration, ANPQualityAudit, FuelType, FuelDelivery } from "../types";
+import {
+  Thermometer,
+  ShieldAlert,
+  CheckCircle,
+  Plus,
+  Gauge,
+  Sparkles,
+  Truck,
+  Download,
+  Trash2,
+  FileText,
+  AlertTriangle,
+} from "lucide-react";
 import { FUEL_TYPES } from "./TanksManagement";
 
 interface ANPQualityControlProps {
   appState: AppState;
   userRole: string;
+  cnpjPosto: string;
   onUpdateCalibrations: (calibrations: NozzleCalibration[]) => void;
   onUpdateQualityAudits: (audits: ANPQualityAudit[]) => void;
+  onUpdateDeliveries: (deliveries: FuelDelivery[]) => void;
+  onAddAuditLog: (actionType: string, target: string, details: string, status: string) => void;
 }
 
 export default function ANPQualityControl({
   appState,
   userRole,
+  cnpjPosto,
   onUpdateCalibrations,
   onUpdateQualityAudits,
+  onUpdateDeliveries,
+  onAddAuditLog,
 }: ANPQualityControlProps) {
-  const { calibrations, qualityAudits, nozzles } = appState;
+  const { calibrations = [], qualityAudits = [], nozzles = [], deliveries = [] } = appState;
+  const fuelDeliveries = deliveries;
   const isReadOnly = userRole === "Frentista";
 
-  // Nozzle calibration state
+  // Active view inside Quality tab: "afericao" (Calibrations), "laudo" (Chemical Quality), "entregas" (Fuel Deliveries)
+  const [activeSubTab, setActiveSubTab] = useState<"afericao" | "laudo" | "entregas">("afericao");
+
+  // Selection state for batch actions
+  const [selectedCalibrations, setSelectedCalibrations] = useState<{ [key: string]: boolean }>({});
+
+  // Nozzle calibration form state
   const [calNozzleId, setCalNozzleId] = useState("");
   const [calVolumeMedido, setCalVolumeMedido] = useState(20.0);
   const [calDesvioMl, setCalDesvioMl] = useState(0); // in mL (-100 to 100)
@@ -39,10 +64,18 @@ export default function ANPQualityControl({
   const [qImpurezas, setQImpurezas] = useState(false);
   const [qResponsavel, setQResponsavel] = useState("");
 
+  // Deliveries state
+  const [delDate, setDelDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [delNfe, setDelNfe] = useState("");
+  const [delCombustivel, setDelCombustivel] = useState<FuelType>("Gasolina Comum");
+  const [delVolume, setDelVolume] = useState(10000);
+  const [delPlaca, setDelPlaca] = useState("");
+  const [delMotorista, setDelMotorista] = useState("");
+
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
 
-  // Handle Nozzle Flow Test registration (Aferição de bico 20L)
+  // ANP deviation rules: acceptable standard deviation is +-60ml in 20L.
   const handleCreateCalibration = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -53,7 +86,6 @@ export default function ANPQualityControl({
       return;
     }
 
-    // Official ANP calibration rule: deviation must be within +-60ml
     const conforme = calDesvioMl >= -60 && calDesvioMl <= 60;
 
     const newCal: NozzleCalibration = {
@@ -67,22 +99,23 @@ export default function ANPQualityControl({
     };
 
     onUpdateCalibrations([...calibrations, newCal]);
+    onAddAuditLog("CREATE", "Qualidade", `Registrou aferição física de 20L para o bico ${calNozzleId}. Desvio: ${calDesvioMl}ml`, "Regular");
+
     setSuccess(
       conforme
-        ? "Aferição de bico salva: Bico califrado conforme norma técnica (desvio: " + calDesvioMl + " ml)."
-        : "Alerta: Aferição salva! O bico está FORA dos padrões ANP (+-60ml). Acione a manutenção!"
+        ? `Aferição de bico salva: Conforme padrão INMETRO (desvio: ${calDesvioMl} ml).`
+        : `ALERTA: Aferição salva! O bico está FORA dos limites técnicos de +-60ml.`
     );
     setTimeout(() => setSuccess(""), 4000);
   };
 
-  // Handle ANP Fuel Quality Audit registration
   const handleCreateQualityAudit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
 
     // Rules:
-    // 1. Gasolines (Gasolina Comum, Gasolina Aditivada) can have up to 27% ethanol (ANP official legal limit)
+    // 1. Gasoline can have up to 27% ethanol (official legal maximum)
     // 2. Aspect must be "Límpido e Isento"
     // 3. No impurities allowed
     const ethanolOk = qCombustivel.includes("Gasolina") ? qTeorEtanol <= 27 : true;
@@ -105,165 +138,354 @@ export default function ANPQualityControl({
     };
 
     onUpdateQualityAudits([...qualityAudits, newAudit]);
+    onAddAuditLog("CREATE", "Qualidade", `Emitiu laudo químico ANP para ${qCombustivel}. Status: ${conforme ? "Aprovado" : "Reprovado"}`, "Regular");
+
     setSuccess(
       conforme
-        ? "Laudo de Qualidade ANP gerado: Combustível CONFORME com as normas técnicas."
-        : "Atenção: Laudo técnico registrado como NÃO CONFORME! Envie notificação imediata à gerência."
+        ? "Laudo de Qualidade ANP gerado: Combustível em total CONFORMIDADE com portarias químicas."
+        : "Alerta: Laudo de qualidade reprovado! Envie notificação imediata à distribuidora."
     );
     setTimeout(() => setSuccess(""), 4500);
   };
 
+  const handleCreateDelivery = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!delNfe.trim() || !delMotorista.trim() || !delPlaca.trim()) {
+      alert("Preencha todos os campos da NF-e.");
+      return;
+    }
+
+    const newDel: FuelDelivery = {
+      id: "del_" + Date.now(),
+      data: delDate,
+      nfe: delNfe,
+      combustivel: delCombustivel,
+      volumeRecebido: Number(delVolume),
+      placaCaminhao: delPlaca,
+      motorista: delMotorista,
+      stationCnpj: cnpjPosto,
+    };
+
+    onUpdateDeliveries([...fuelDeliveries, newDel]);
+    onAddAuditLog("CREATE", "Estoque", `Recebeu carga de combustível NF-e ${delNfe}: ${delVolume}L de ${delCombustivel}`, "Regular");
+
+    setSuccess(`Carga de combustível registrada com sucesso! NF-e ${delNfe}.`);
+    setTimeout(() => setSuccess(""), 3000);
+
+    setDelNfe("");
+    setDelMotorista("");
+    setDelPlaca("");
+  };
+
+  const handleDeleteDelivery = (id: string) => {
+    if (confirm("Deseja remover o registro desta entrega?")) {
+      const filtered = fuelDeliveries.filter((d) => d.id !== id);
+      onUpdateDeliveries(filtered);
+      onAddAuditLog("DELETE", "Estoque", `Excluiu recebimento de carga ID ${id}`, "Regular");
+    }
+  };
+
+  // Export selected calibrations to CSV
+  const handleExportSelectedCSV = () => {
+    const selectedIds = Object.keys(selectedCalibrations).filter((id) => selectedCalibrations[id]);
+    if (selectedIds.length === 0) {
+      alert("Selecione ao menos uma aferição na tabela abaixo para exportar.");
+      return;
+    }
+
+    const rowsToExport = calibrations.filter((c) => selectedIds.includes(c.id));
+    let csvContent = "data:text/csv;charset=utf-8,ID,Data,Bico,VolumeMedido,DesvioMl,Conforme,Responsavel\n";
+
+    rowsToExport.forEach((c) => {
+      csvContent += `${c.id},${c.data},${c.nozzleId},${c.volumeMedido},${c.desvioMl},${c.conforme ? "SIM" : "NAO"},${c.operadorResponsavel}\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const downloadLink = document.createElement("a");
+    downloadLink.setAttribute("href", encodedUri);
+    downloadLink.setAttribute("download", `afericoes_bico_export.csv`);
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+
+    onAddAuditLog("DOWNLOAD", "Qualidade", `Exportou CSV com ${rowsToExport.length} aferições de vazão`, "Regular");
+  };
+
+  const handleSelectAllCalibrations = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const newSel: { [key: string]: boolean } = {};
+      calibrations.forEach((c) => {
+        newSel[c.id] = true;
+      });
+      setSelectedCalibrations(newSel);
+    } else {
+      setSelectedCalibrations({});
+    }
+  };
+
+  const handleToggleSelectCalibration = (id: string) => {
+    setSelectedCalibrations((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  const filteredDeliveries = fuelDeliveries.filter((d) => d.stationCnpj === cnpjPosto);
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center pb-4 border-b border-slate-200">
+      {/* Tab Navigation header */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200">
         <div>
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
             <Thermometer className="text-indigo-600 h-6 w-6" />
-            Controle de Qualidade ANP & Aferições
+            Vazão, Qualidade e NF-e
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Gere laudos de densidade, temperatura, teor de etanol e execute o teste de aferição de 20L de bico
+            Controle aferições mecânicas, emita laudos químicos de conformidade ANP e dê entrada nas notas de entrega
           </p>
+        </div>
+
+        {/* Sub tabs selectors */}
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 self-start sm:self-auto">
+          <button
+            onClick={() => setActiveSubTab("afericao")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              activeSubTab === "afericao" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            📏 Teste 20L
+          </button>
+          <button
+            onClick={() => setActiveSubTab("laudo")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              activeSubTab === "laudo" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            🧪 Laudo Químico
+          </button>
+          <button
+            onClick={() => setActiveSubTab("entregas")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              activeSubTab === "entregas" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            🚚 Entregas NF-e
+          </button>
         </div>
       </div>
 
       {success && (
-        <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl flex items-center gap-2">
+        <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs">
           <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
           {success}
         </div>
       )}
 
       {error && (
-        <div className="p-3 bg-rose-50 border border-rose-100 text-rose-800 text-sm rounded-xl flex items-center gap-2">
+        <div className="p-3 bg-rose-50 border border-rose-100 text-rose-800 text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs">
           <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600" />
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Module A: 20L Flow Calibration */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-2 border-b border-slate-100 flex items-center gap-2">
-            <Gauge className="text-indigo-600 h-5 w-5" />
-            Aferição Física de Vazão (Teste de 20 Litros)
-          </h3>
-          <p className="text-xs text-slate-500">
-            A cada turno ou semanalmente, é obrigatório extrair 20 litros exatos do bico no galão aferidor certificado do INMETRO. O desvio mecânico máximo aceito por lei é de **+-60ml** (ou -0.3% a +0.3%).
-          </p>
+      {/* RENDER ACTIVE DEPARTMENT MODULE */}
+      {activeSubTab === "afericao" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Form Left */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-1.5">
+              <Gauge className="h-4 w-4 text-indigo-600" />
+              Lançar Aferição Física (20L)
+            </h3>
+            <p className="text-[11px] text-slate-500 leading-normal">
+              A cada turno, é obrigatório extrair 20 litros exatos do bico no galão aferidor certificado do INMETRO. O desvio máximo aceito por lei é de <strong>+-60ml</strong> (ou -0.3% a +0.3%).
+            </p>
 
-          <form onSubmit={handleCreateCalibration} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleCreateCalibration} className="space-y-4 pt-2">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Bico de Bomba *
-                </label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Selecione o Bico *</label>
                 <select
                   required
                   value={calNozzleId}
                   onChange={(e) => setCalNozzleId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer font-semibold"
                 >
                   <option value="">Selecione o Bico</option>
-                  {nozzles.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.numeroBico} ({n.bombaAssociada})
-                    </option>
-                  ))}
+                  {nozzles.map((n) => {
+                    const tank = appState.tanks.find((t) => t.id === n.tanqueId);
+                    return (
+                      <option key={n.id} value={n.id}>
+                        Bico {n.numeroBico} ({tank ? tank.combustivel : "Sem combustível"}) - Bomba {n.bombaAssociada}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Volume Galão (L)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  disabled
-                  value={calVolumeMedido}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 text-sm cursor-not-allowed"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Desvio Medido (ml) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  value={calDesvioMl}
-                  onChange={(e) => setCalDesvioMl(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                  placeholder="Ex: -30"
-                />
-                <span className="text-[10px] text-slate-400 block mt-1">
-                  Valores negativos indicam falta de produto; positivos indicam excesso.
-                </span>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Vol. Galão (L)</label>
+                  <input
+                    type="number"
+                    disabled
+                    value={20.0}
+                    className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-400 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Desvio (ml) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={calDesvioMl}
+                    onChange={(e) => setCalDesvioMl(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold text-slate-800"
+                    placeholder="Ex: -25 ou 30"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Operador Técnico *
-                </label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Operador Responsável *</label>
                 <input
                   type="text"
                   required
                   value={calOperador}
                   onChange={(e) => setCalOperador(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                   placeholder="Ex: Carlos Santos"
                 />
               </div>
-            </div>
 
-            {/* Quick Live Preview Verdict */}
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
-              <span className="text-xs text-slate-500">Veredicto de Calibração:</span>
-              <span
-                className={`text-xs font-bold font-mono px-3 py-1 rounded-full ${
-                  calDesvioMl >= -60 && calDesvioMl <= 60
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                    : "bg-rose-50 text-rose-700 border border-rose-200 animate-pulse"
-                }`}
+              {/* Status block live preview */}
+              <div className="p-3 bg-slate-50 border border-slate-200/50 rounded-xl text-center">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Veredicto Rápido</p>
+                <span
+                  className={`inline-block px-2.5 py-0.5 rounded-full font-black text-[9px] uppercase ${
+                    calDesvioMl >= -60 && calDesvioMl <= 60
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                      : "bg-rose-50 text-rose-700 border border-rose-100 animate-pulse"
+                  }`}
+                >
+                  {calDesvioMl >= -60 && calDesvioMl <= 60 ? "DENTRO DOS LIMITES (+-60ml)" : "FORA DE CALIBRAÇÃO!"}
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isReadOnly}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
               >
-                {calDesvioMl >= -60 && calDesvioMl <= 60 ? "DENTRO DOS LIMITES (+-60ml)" : "FORA DE CALIBRAÇÃO!"}
-              </span>
+                Salvar Aferição
+              </button>
+            </form>
+          </div>
+
+          {/* Table list Right */}
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+              <h3 className="text-sm font-semibold text-slate-800">Histórico de Aferição de Bicos</h3>
+              <button
+                onClick={handleExportSelectedCSV}
+                className="px-3 py-1.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Exportar Selecionados (CSV)
+              </button>
             </div>
 
-            <button
-              type="submit"
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition cursor-pointer"
-            >
-              Registrar Aferição de Bomba
-            </button>
-          </form>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100 bg-slate-50/50">
+                    <th className="py-2.5 px-3">
+                      <input
+                        type="checkbox"
+                        onChange={handleSelectAllCalibrations}
+                        className="rounded border-slate-300 h-3.5 w-3.5 text-indigo-600"
+                      />
+                    </th>
+                    <th className="py-2.5 px-3">Data</th>
+                    <th className="py-2.5 px-3">Bico</th>
+                    <th className="py-2.5 px-3">Desvio Medido</th>
+                    <th className="py-2.5 px-3">Veredicto</th>
+                    <th className="py-2.5 px-3">Operador</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calibrations.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500 italic">Nenhuma aferição física registrada ainda.</td>
+                    </tr>
+                  ) : (
+                    calibrations
+                      .slice()
+                      .reverse()
+                      .map((cal) => {
+                        const b = nozzles.find((nozzle) => nozzle.id === cal.nozzleId);
+                        const isChecked = !!selectedCalibrations[cal.id];
+                        return (
+                          <tr key={cal.id} className="border-b border-slate-100 hover:bg-slate-50/40">
+                            <td className="py-2.5 px-3">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleSelectCalibration(cal.id)}
+                                className="rounded border-slate-300 h-3.5 w-3.5 text-indigo-600"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold text-slate-600">{cal.data.split("-").reverse().join("/")}</td>
+                            <td className="py-2.5 px-3">
+                              <span className="font-bold text-slate-800">
+                                Bico {b ? b.numeroBico : "Bico Geral"}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                              {cal.desvioMl > 0 ? `+${cal.desvioMl}` : cal.desvioMl} mL
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`text-[9px] font-bold px-2 py-0.5 border rounded-full ${
+                                  cal.conforme
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                    : "bg-rose-50 text-rose-700 border-rose-100 animate-pulse"
+                                }`}
+                              >
+                                {cal.conforme ? "CONFORME" : "REJEITADO"}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-500">{cal.operadorResponsavel}</td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
+      )}
 
-        {/* Module B: Chemical Quality (ANP) */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-2 border-b border-slate-100 flex items-center gap-2">
-            <Sparkles className="text-indigo-600 h-5 w-5" />
-            Laudo Químico de Qualidade ANP
-          </h3>
-          <p className="text-xs text-slate-500">
-            A regulamentação ANP brasileira estabelece que a Gasolina Comum ou Aditivada deve possuir teor de etanol anidro de **até 27%**, aspecto visual límpido/isento e ausência total de água ou sedimentos.
-          </p>
+      {activeSubTab === "laudo" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Chemical Form Left */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-indigo-600" />
+              Lançar Teste Químico ANP
+            </h3>
+            <p className="text-[11px] text-slate-500 leading-normal">
+              A regulamentação ANP estabelece parâmetros químicos estritos: Gasolinas de até <strong>27%</strong> de etanol anidro, e aspecto visual transparente (límpido e isento de sedimentos/água).
+            </p>
 
-          <form onSubmit={handleCreateQualityAudit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleCreateQualityAudit} className="space-y-4 pt-2">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Combustível Amostrado *
-                </label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Combustível *</label>
                 <select
                   value={qCombustivel}
                   onChange={(e) => setQCombustivel(e.target.value as FuelType)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
                 >
                   {FUEL_TYPES.map((f) => (
                     <option key={f} value={f}>
@@ -273,212 +495,296 @@ export default function ANPQualityControl({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Densidade (g/cm³) *
-                </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  required
-                  value={qDensidade}
-                  onChange={(e) => setQDensidade(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Temp. (°C) *
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  required
-                  value={qTemperatura}
-                  onChange={(e) => setQTemperatura(Number(e.target.value))}
-                  className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Densidade (g/cm³)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    required
+                    value={qDensidade}
+                    onChange={(e) => setQDensidade(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Temperatura (°C)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={qTemperatura}
+                    onChange={(e) => setQTemperatura(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5" title="Apenas Gasolina">
-                  Etanol (%) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  disabled={!qCombustivel.includes("Gasolina")}
-                  value={qCombustivel.includes("Gasolina") ? qTeorEtanol : 0}
-                  onChange={(e) => setQTeorEtanol(Number(e.target.value))}
-                  className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm font-mono disabled:opacity-40 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Teor Etanol (%)</label>
+                  <input
+                    type="number"
+                    required
+                    disabled={!qCombustivel.includes("Gasolina")}
+                    value={qCombustivel.includes("Gasolina") ? qTeorEtanol : 0}
+                    onChange={(e) => setQTeorEtanol(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono disabled:opacity-40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Aspecto Visual</label>
+                  <select
+                    value={qAspecto}
+                    onChange={(e) => setQAspecto(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="Límpido e Isento">Límpido/Isento</option>
+                    <option value="Turvo">Turvo</option>
+                    <option value="Com Impurezas">Impurezas</option>
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Aspecto Visual *
-                </label>
-                <select
-                  value={qAspecto}
-                  onChange={(e) => setQAspecto(e.target.value as any)}
-                  className="w-full px-1 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                >
-                  <option value="Límpido e Isento">Límpido/Isento</option>
-                  <option value="Turvo">Turvo</option>
-                  <option value="Com Impurezas">Impurezas</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-600 flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={qImpurezas}
-                  onChange={(e) => setQImpurezas(e.target.checked)}
-                  className="rounded bg-white border-slate-200 h-4 w-4 text-indigo-600 focus:ring-0 cursor-pointer"
-                />
-                Há presença de impurezas sólidas flutuantes?
-              </label>
-
-              <div className="w-1/2">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Químico Responsável *</label>
                 <input
                   type="text"
                   required
                   value={qResponsavel}
                   onChange={(e) => setQResponsavel(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                  placeholder="Nome do Químico"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  placeholder="Ex: Roberto Silveira"
                 />
               </div>
-            </div>
 
-            {/* Verdict Live preview */}
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
-              <span className="text-xs text-slate-500">Veredicto Químico ANP:</span>
-              <span
-                className={`text-xs font-bold font-mono px-3 py-1 rounded-full ${
-                  (!qCombustivel.includes("Gasolina") || qTeorEtanol <= 27) && qAspecto === "Límpido e Isento" && !qImpurezas
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                    : "bg-rose-50 text-rose-700 border border-rose-200 animate-pulse"
-                }`}
+              <label className="flex items-start space-x-2 bg-slate-50 p-2 rounded-xl border border-slate-100 cursor-pointer text-[10.5px]">
+                <input
+                  type="checkbox"
+                  checked={qImpurezas}
+                  onChange={(e) => setQImpurezas(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 mt-0.5"
+                />
+                <span className="text-slate-600 leading-normal">Houve detecção de partículas, impurezas sólidas ou água livre na proveta de teste?</span>
+              </label>
+
+              <button
+                type="submit"
+                disabled={isReadOnly}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
               >
-                {(!qCombustivel.includes("Gasolina") || qTeorEtanol <= 27) && qAspecto === "Límpido e Isento" && !qImpurezas
-                  ? "COMBUSTÍVEL EM CONFORMIDADE (OK)"
-                  : "NÃO CONFORME! CONTAMINADO"}
-              </span>
+                Registrar Laudo Químico
+              </button>
+            </form>
+          </div>
+
+          {/* List Right */}
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <h3 className="text-sm font-semibold text-slate-800">Histórico de Laudos Químicos</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100 bg-slate-50/50">
+                    <th className="py-2.5 px-3">Data</th>
+                    <th className="py-2.5 px-3">Combustível</th>
+                    <th className="py-2.5 px-3">Metricas</th>
+                    <th className="py-2.5 px-3">Etanol</th>
+                    <th className="py-2.5 px-3">Veredicto</th>
+                    <th className="py-2.5 px-3">Resp. Técnico</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {qualityAudits.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500 italic">Nenhum laudo químico emitido hoje.</td>
+                    </tr>
+                  ) : (
+                    qualityAudits
+                      .slice()
+                      .reverse()
+                      .map((audit) => (
+                        <tr key={audit.id} className="border-b border-slate-100 hover:bg-slate-50/40">
+                          <td className="py-2.5 px-3 font-semibold text-slate-600">{audit.data.split("-").reverse().join("/")}</td>
+                          <td className="py-2.5 px-3 font-bold text-slate-800">{audit.combustivel}</td>
+                          <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700">
+                            Dens: {audit.densidade} | Temp: {audit.temperatura}°C
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                            {audit.combustivel.includes("Gasolina") ? `${audit.teorEtanol}%` : "—"}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`text-[9px] font-bold px-2 py-0.5 border rounded-full ${
+                                audit.conforme
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                  : "bg-rose-50 text-rose-700 border-rose-100 animate-pulse"
+                              }`}
+                            >
+                              {audit.conforme ? "APROVADO" : "FORA DE PADRÃO"}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500">{audit.responsavelTecnico}</td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
             </div>
-
-            <button
-              type="submit"
-              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-lg transition shadow-md shadow-emerald-500/10 cursor-pointer"
-            >
-              Emitir Laudo ANP Conforme
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* Historical Lists */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Calibrations Table */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">
-            Histórico de Aferição de Bicos (20L)
-          </h3>
-          <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-            {calibrations.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-4">Nenhuma aferição física registrada ainda.</p>
-            ) : (
-              calibrations
-                .slice()
-                .reverse()
-                .map((cal) => {
-                  const b = nozzles.find((nozzle) => nozzle.id === cal.nozzleId);
-                  return (
-                    <div
-                      key={cal.id}
-                      className={`p-3 rounded-xl border flex justify-between items-center text-xs ${
-                        cal.conforme ? "bg-slate-50 border-slate-100" : "bg-rose-50 border-rose-100"
-                      }`}
-                    >
-                      <div>
-                        <span className="font-bold text-slate-800">Bico: {b ? b.numeroBico : "Bico Geral"}</span>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          Técnico: {cal.operadorResponsavel} | Data: {cal.data}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <span
-                          className={`font-mono font-bold px-2 py-0.5 rounded text-[10px] block ${
-                            cal.conforme
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                              : "bg-rose-50 text-rose-700 border border-rose-100 animate-pulse"
-                          }`}
-                        >
-                          {cal.desvioMl > 0 ? `+${cal.desvioMl}` : cal.desvioMl} ml {cal.conforme ? "(Aprovado)" : "(Rejeitado)"}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-            )}
           </div>
         </div>
+      )}
 
-        {/* Quality Audits Table */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">
-            Histórico de Conformidade Químico ANP
-          </h3>
-          <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-            {qualityAudits.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-4">Nenhum laudo químico emitido hoje.</p>
-            ) : (
-              qualityAudits
-                .slice()
-                .reverse()
-                .map((audit) => (
-                  <div
-                    key={audit.id}
-                    className={`p-3 rounded-xl border ${
-                      audit.conforme ? "bg-slate-50 border-slate-100" : "bg-rose-50 border-rose-100"
-                    } text-xs`}
+      {activeSubTab === "entregas" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Carga Form Left */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-1.5">
+              <Truck className="h-4 w-4 text-indigo-600" />
+              Entrada de Carga (NF-e)
+            </h3>
+            <p className="text-[11px] text-slate-500 leading-normal">
+              Registre a chegada de caminhões-tanques da distribuidora. Faça o laudo de amostragem na proveta do combustível antes de descarregar o produto no tanque correto.
+            </p>
+
+            <form onSubmit={handleCreateDelivery} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data Recebimento</label>
+                  <input
+                    type="date"
+                    required
+                    value={delDate}
+                    onChange={(e) => setDelDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Chave NF-e / ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={delNfe}
+                    onChange={(e) => setDelNfe(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold text-slate-800"
+                    placeholder="Ex: 549382"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Combustível</label>
+                  <select
+                    value={delCombustivel}
+                    onChange={(e) => setDelCombustivel(e.target.value as FuelType)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer font-semibold"
                   >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-slate-800">{audit.combustivel}</span>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          Data: {audit.data} | Resp: {audit.responsavelTecnico}
-                        </p>
-                      </div>
+                    {FUEL_TYPES.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Volume (L) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={delVolume}
+                    onChange={(e) => setDelVolume(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-bold"
+                  />
+                </div>
+              </div>
 
-                      <span
-                        className={`font-semibold px-2 py-0.5 rounded text-[10px] uppercase ${
-                          audit.conforme
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                            : "bg-rose-50 text-rose-700 border border-rose-100 animate-pulse"
-                        }`}
-                      >
-                        {audit.conforme ? "CONFORME ANP" : "FORA DE PADRÃO"}
-                      </span>
-                    </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Placa Caminhão</label>
+                  <input
+                    type="text"
+                    required
+                    value={delPlaca}
+                    onChange={(e) => setDelPlaca(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    placeholder="Ex: ABC-1234"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Motorista</label>
+                  <input
+                    type="text"
+                    required
+                    value={delMotorista}
+                    onChange={(e) => setDelMotorista(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    placeholder="Ex: Roberto Silveira"
+                  />
+                </div>
+              </div>
 
-                    <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] text-slate-500 bg-white p-1.5 rounded border border-slate-100">
-                      <div>Densidade: {audit.densidade}</div>
-                      <div>Temp: {audit.temperatura}°C</div>
-                      {audit.combustivel.includes("Gasolina") && <div>Teor Etanol: {audit.teorEtanol}%</div>}
-                    </div>
-                  </div>
-                ))
-            )}
+              <button
+                type="submit"
+                disabled={isReadOnly}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+              >
+                Dar Entrada na Carga NF-e
+              </button>
+            </form>
+          </div>
+
+          {/* List Deliveries Right */}
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <h3 className="text-sm font-semibold text-slate-800">Cargas e Recebimentos de Combustíveis</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100 bg-slate-50/50">
+                    <th className="py-2.5 px-3">Data</th>
+                    <th className="py-2.5 px-3">NF-e</th>
+                    <th className="py-2.5 px-3">Combustível</th>
+                    <th className="py-2.5 px-3">Volume Recebido</th>
+                    <th className="py-2.5 px-3">Motorista / Placa</th>
+                    <th className="py-2.5 px-3 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDeliveries.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500 italic">Nenhum recebimento de carga registrado.</td>
+                    </tr>
+                  ) : (
+                    filteredDeliveries
+                      .slice()
+                      .reverse()
+                      .map((d) => (
+                        <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50/40">
+                          <td className="py-2.5 px-3 font-semibold text-slate-600">{d.data.split("-").reverse().join("/")}</td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-600">#{d.nfe}</td>
+                          <td className="py-2.5 px-3 font-bold text-slate-800">{d.combustivel}</td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                            {d.volumeRecebido.toLocaleString("pt-BR")} L
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500">
+                            {d.motorista} ({d.placaCaminhao})
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              onClick={() => handleDeleteDelivery(d.id)}
+                              className="text-rose-600 hover:text-rose-800 font-bold hover:underline cursor-pointer"
+                            >
+                              Remover
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

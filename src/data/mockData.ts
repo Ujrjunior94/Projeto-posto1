@@ -262,4 +262,101 @@ export const INITIAL_STATE: AppState = {
       responsavelTecnico: "Carlos Eduardo Silva",
     },
   ],
+  lmc: [
+    {
+      id: "l1",
+      date: "2026-07-01",
+      fuelType: "Gasolina Comum",
+      openingStock: 12500,
+      deliveryVolume: 0,
+      litersSold: 2450,
+      physicalStock: 10042,
+      stationCnpj: "12.345.678/0001-99"
+    },
+    {
+      id: "l2",
+      date: "2026-07-02",
+      fuelType: "Gasolina Comum",
+      openingStock: 10042,
+      deliveryVolume: 10000,
+      litersSold: 2600,
+      physicalStock: 17447,
+      stationCnpj: "12.345.678/0001-99"
+    },
+    {
+      id: "l3",
+      date: "2026-07-01",
+      fuelType: "Diesel S10",
+      openingStock: 18000,
+      deliveryVolume: 0,
+      litersSold: 3100,
+      physicalStock: 14896,
+      stationCnpj: "12.345.678/0001-99"
+    }
+  ],
+  appointments: [
+    {
+      id: "a1",
+      title: "Inspeção de Vendas do INMETRO",
+      date: "2026-07-15",
+      time: "09:00",
+      description: "Aferição periódica de vazão de todos os bicos instalados.",
+      stationCnpj: "12.345.678/0001-99"
+    },
+    {
+      id: "a2",
+      title: "Manutenção Preventiva Tanque 02",
+      date: "2026-07-20",
+      time: "14:00",
+      description: "Limpeza interna e drenagem de condensação do tanque.",
+      stationCnpj: "12.345.678/0001-99"
+    }
+  ],
+  systemCredentials: [
+    {
+      id: "sc1",
+      systemName: "Emissor NF-e SEFAZ",
+      category: "Fiscal",
+      login: "faturamento@meuposto.com",
+      password: "sefazSecret2026",
+      description: "Portal do Contribuinte SEFAZ",
+      stationCnpj: "12.345.678/0001-99"
+    },
+    {
+      id: "sc2",
+      systemName: "Concentrador de Bombas (Company)",
+      category: "Operacional",
+      login: "admin_gerente",
+      password: "bombaMasterPass",
+      description: "IP local: 192.168.1.100",
+      stationCnpj: "12.345.678/0001-99"
+    }
+  ],
+  deliveries: [
+    {
+      id: "d1",
+      date: "2026-07-12",
+      invoiceNumber: "NF-e 87342",
+      fuelType: "Gasolina Comum",
+      volume: 10000,
+      driverName: "Carlos Silveira",
+      driverCnh: "123456789-0",
+      truckPlate: "ABC-1234",
+      conformityId: "q1",
+      stationCnpj: "12.345.678/0001-99"
+    }
+  ],
+  audits: [
+    {
+      id: "ad1",
+      date: "2026-07-13",
+      time: "09:30:00",
+      actionType: "LOGIN",
+      target: "Segurança",
+      details: "Gerente Mariana Costa Santos efetuou login no sistema.",
+      operator: "mariana@meuposto.com",
+      complianceStatus: "Regular",
+      stationCnpj: "12.345.678/0001-99"
+    }
+  ]
 };

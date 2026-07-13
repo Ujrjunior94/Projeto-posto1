@@ -36,13 +36,28 @@ export interface Nozzle {
   precoPorLitro: number; // e.g., 5.89
 }
 
-export type ShiftName = "Turno A (Manhã)" | "Turno B (Tarde)" | "Turno C (Noite)";
+export type ShiftName = "Turno A (Manhã)" | "Turno B (Tarde)" | "Turno C (Noite)" | string;
 
 export interface ShiftChecklist {
   limpezaPistas: boolean;
   usoEPIs: boolean;
   afericaoEquipamentosSeguranca: boolean;
   testeGerador: boolean;
+}
+
+export interface ShiftOccurrence {
+  id: string;
+  tipo: "Atraso" | "Falta" | "Atestado" | "Dobra" | "Problema na Pista" | "Outro";
+  descricao: string;
+  dataHora: string; // YYYY-MM-DD HH:MM
+}
+
+export interface ShiftEvent {
+  id: string;
+  titulo: string;
+  tipo: "Treinamento" | "Reunião" | "Manutenção" | "Auditoria" | "Outro";
+  descricao: string;
+  horario: string; // HH:MM
 }
 
 export interface ShiftSchedule {
@@ -52,6 +67,10 @@ export interface ShiftSchedule {
   frentistaResponsavel: string; // Nome do frentista
   checklist: ShiftChecklist;
   status: "Planejado" | "Em Andamento" | "Fechado";
+  stationCnpj?: string;
+  dayOfWeek?: string;
+  occurrences?: ShiftOccurrence[];
+  events?: ShiftEvent[];
 }
 
 export type TransactionType = "Receita" | "Despesa";
@@ -124,6 +143,67 @@ export interface SyncConfig {
 }
 
 // Entire app database state that gets synchronized
+export interface LmcRecord {
+  id: string;
+  date: string; // YYYY-MM-DD
+  fuelType: string;
+  openingStock: number;
+  deliveryVolume: number;
+  litersSold: number;
+  physicalStock: number;
+  stationCnpj: string;
+}
+
+export interface Appointment {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  description?: string;
+  stationCnpj: string;
+}
+
+export interface SystemCredential {
+  id: string;
+  systemName: string;
+  category: string;
+  login: string;
+  password: string; // Password stored as string
+  description?: string;
+  stationCnpj: string;
+}
+
+export interface FuelDelivery {
+  id: string;
+  date?: string;
+  invoiceNumber?: string;
+  fuelType?: string;
+  volume?: number;
+  driverName?: string;
+  driverCnh?: string;
+  truckPlate?: string;
+  conformityId?: string | null;
+  stationCnpj: string;
+  data?: string;
+  nfe?: string;
+  combustivel?: string;
+  volumeRecebido?: number;
+  placaCaminhao?: string;
+  motorista?: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  date: string;
+  time: string;
+  actionType: string;
+  target: string;
+  details: string;
+  operator: string;
+  complianceStatus: string;
+  stationCnpj: string;
+}
+
 export interface AppState {
   users: User[];
   tanks: FuelTank[];
@@ -134,4 +214,10 @@ export interface AppState {
   reconciliations: ShiftReconciliation[];
   calibrations: NozzleCalibration[];
   qualityAudits: ANPQualityAudit[];
+  lmc: LmcRecord[];
+  appointments: Appointment[];
+  systemCredentials: SystemCredential[];
+  deliveries: FuelDelivery[];
+  audits: ActivityLog[];
 }
+

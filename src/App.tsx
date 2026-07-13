@@ -15,6 +15,8 @@ import CashManagement from "./components/CashManagement";
 import ANPQualityControl from "./components/ANPQualityControl";
 import ReportsAdvanced from "./components/ReportsAdvanced";
 import CloudSyncPanel from "./components/CloudSyncPanel";
+import LMCManagement from "./components/LMCManagement";
+import AuditorLog from "./components/AuditorLog";
 
 import {
   LayoutDashboard,
@@ -31,6 +33,8 @@ import {
   Menu,
   X,
   Lock,
+  History,
+  BookOpen,
 } from "lucide-react";
 
 const STORAGE_KEY = "meu_posto_app_state";
@@ -130,6 +134,44 @@ export default function App() {
     setAppState((prev) => ({ ...prev, qualityAudits }));
   };
 
+  const handleUpdateDeliveries = (deliveries: typeof appState.deliveries) => {
+    setAppState((prev) => ({ ...prev, deliveries }));
+  };
+
+  const handleUpdateLmc = (lmc: typeof appState.lmc) => {
+    setAppState((prev) => ({ ...prev, lmc }));
+  };
+
+  const handleUpdateCredentials = (systemCredentials: typeof appState.systemCredentials) => {
+    setAppState((prev) => ({ ...prev, systemCredentials }));
+  };
+
+  const handleUpdateUsers = (users: typeof appState.users) => {
+    setAppState((prev) => ({ ...prev, users }));
+  };
+
+  const handleUpdateAudits = (audits: typeof appState.audits) => {
+    setAppState((prev) => ({ ...prev, audits }));
+  };
+
+  const handleAddAuditLog = (actionType: string, target: string, details: string, status: string = "Regular") => {
+    const newLog = {
+      id: "log_" + Date.now() + "_" + Math.floor(Math.random() * 100),
+      date: new Date().toISOString().split("T")[0],
+      time: new Date().toLocaleTimeString("pt-BR"),
+      actionType,
+      target,
+      details,
+      operator: currentUser ? currentUser.nomeCompleto : "Sistema",
+      complianceStatus: status,
+      stationCnpj: currentUser ? currentUser.cnpjPosto : "12.345.678/0001-99",
+    };
+    setAppState((prev) => ({
+      ...prev,
+      audits: [newLog, ...(prev.audits || [])],
+    }));
+  };
+
   const handleRestoreState = (restoredState: AppState) => {
     // Keep users intact so the current user doesn't lose login session
     const currentUsers = appState.users;
@@ -162,8 +204,10 @@ export default function App() {
     { id: "tanques", name: "Controle de Tanques", icon: Fuel, frentistaAllowed: false },
     { id: "bicos", name: "Bicos & Bombas", icon: Activity, frentistaAllowed: false },
     { id: "qualidade", name: "Qualidade ANP", icon: Thermometer, frentistaAllowed: false },
+    { id: "lmc", name: "Livro LMC (ANP)", icon: BookOpen, frentistaAllowed: false },
     { id: "relatorios", name: "Relatórios & PDF", icon: FileText, frentistaAllowed: false },
-    { id: "sincronizacao", name: "Sincronização Nuvem", icon: Cloud, frentistaAllowed: false },
+    { id: "sincronizacao", name: "Sistemas & Segurança", icon: Cloud, frentistaAllowed: false },
+    { id: "auditoria", name: "Auditoria ERP", icon: History, frentistaAllowed: false },
   ];
 
   return (
@@ -397,7 +441,10 @@ export default function App() {
             <ShiftsChecklists
               appState={appState}
               userRole={currentUser.cargo}
+              cnpjPosto={currentUser.cnpjPosto}
               onUpdateShifts={handleUpdateShifts}
+              onUpdateUsers={handleUpdateUsers}
+              onAddAuditLog={handleAddAuditLog}
             />
           )}
 
@@ -415,8 +462,21 @@ export default function App() {
             <ANPQualityControl
               appState={appState}
               userRole={currentUser.cargo}
+              cnpjPosto={currentUser.cnpjPosto}
               onUpdateCalibrations={handleUpdateCalibrations}
               onUpdateQualityAudits={handleUpdateQualityAudits}
+              onUpdateDeliveries={handleUpdateDeliveries}
+              onAddAuditLog={handleAddAuditLog}
+            />
+          )}
+
+          {activeTab === "lmc" && (
+            <LMCManagement
+              appState={appState}
+              userRole={currentUser.cargo}
+              cnpjPosto={currentUser.cnpjPosto}
+              onUpdateLmc={handleUpdateLmc}
+              onAddAuditLog={handleAddAuditLog}
             />
           )}
 
@@ -431,6 +491,17 @@ export default function App() {
               syncConfig={syncConfig}
               onUpdateConfig={setSyncConfig}
               onRestoreState={handleRestoreState}
+              onUpdateCredentials={handleUpdateCredentials}
+              onUpdateUsers={handleUpdateUsers}
+              onAddAuditLog={handleAddAuditLog}
+            />
+          )}
+
+          {activeTab === "auditoria" && (
+            <AuditorLog
+              appState={appState}
+              cnpjPosto={currentUser.cnpjPosto}
+              onUpdateAudits={handleUpdateAudits}
             />
           )}
 

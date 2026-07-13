@@ -7,6 +7,37 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+/* Custom resets or global styles */
+body {
+  background-color: #f8fafc;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Dense layout spacing utility overrides */
+.dense-table th, .dense-table td {
+  padding-top: 0.4rem !important;
+  padding-bottom: 0.4rem !important;
+  padding-left: 0.6rem !important;
+  padding-right: 0.6rem !important;
+}
+
+/* Compact input and selector elements */
+.dense-input {
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
+  font-size: 0.75rem !important;
+  border-radius: 0.5rem !important;
+}
+
+/* Sleek high-density micro cards */
+.hd-card {
+  border-radius: 0.75rem !important;
+  padding: 1rem !important;
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02) !important;
+}
+
 @keyframes wave-animation {
   0% {
     transform: translateX(0) translateZ(0) scaleY(1);
