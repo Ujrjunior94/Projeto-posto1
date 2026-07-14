@@ -146,7 +146,35 @@ export default function ShiftsChecklists({
 
         const data = await response.json();
         
-        // Merge recognized data into existing shifts
+        // 1. Incorporate recognized employees into the users list
+        const newUsers = [...users];
+        let usersAdded = 0;
+
+        if (data.employees && data.employees.length > 0) {
+          data.employees.forEach((empName: string) => {
+            const exists = users.some(u => u.nomeCompleto.toLowerCase() === empName.toLowerCase() && u.cnpjPosto === cnpjPosto);
+            if (!exists && empName.toLowerCase() !== "evento geral") {
+              const newFrentista: User = {
+                id: "u_ai_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                nomeCompleto: empName,
+                email: empName.toLowerCase().replace(/\s/g, "") + "@posto.com",
+                senhaCriptografada: "frentista123",
+                cpf: "000.000.000-00",
+                cargo: "Frentista",
+                cnpjPosto,
+                telefone: "(00) 00000-0000",
+              };
+              newUsers.push(newFrentista);
+              usersAdded++;
+            }
+          });
+          
+          if (usersAdded > 0) {
+            onUpdateUsers(newUsers);
+          }
+        }
+
+        // 2. Merge recognized data into existing shifts
         const newShifts = [...shifts];
         
         // Process schedules
@@ -198,8 +226,8 @@ export default function ShiftsChecklists({
         }
 
         onUpdateShifts(newShifts);
-        onAddAuditLog("IMPORT", "Escala", `Importação concluída: ${data.schedules?.length || 0} turnos e ${data.events?.length || 0} eventos reconhecidos`, "Regular");
-        alert("Escala importada com sucesso!");
+        onAddAuditLog("IMPORT", "Escala", `Importação concluída: ${data.employees?.length || 0} funcionários, ${data.schedules?.length || 0} turnos e ${data.events?.length || 0} eventos reconhecidos`, "Regular");
+        alert(`Escala importada com sucesso!\n${usersAdded} novos funcionários adicionados ao cadastro.`);
       };
       reader.readAsDataURL(file);
     } catch (err) {

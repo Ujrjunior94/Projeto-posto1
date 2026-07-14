@@ -68,9 +68,10 @@ async function startServer() {
         return res.status(400).json({ error: "Imagem e mimeType são obrigatórios." });
       }
 
-      const prompt = `Analise a imagem da escala de trabalho de um posto de combustíveis e extraia as informações de turnos (schedules) e eventos (reuniões, treinamentos, manutenções).
+      const prompt = `Analise a imagem da escala de trabalho de um posto de combustíveis e extraia as informações de turnos (schedules), eventos (reuniões, treinamentos, manutenções) e a lista única de funcionários citados.
       Retorne um JSON seguindo exatamente este esquema:
       {
+        "employees": ["Nome 1", "Nome 2"],
         "schedules": [
           { "data": "YYYY-MM-DD", "turno": "Nome do Turno", "frentistaResponsavel": "Nome do Funcionário" }
         ],
@@ -93,6 +94,10 @@ async function startServer() {
           responseSchema: {
             type: Type.OBJECT,
             properties: {
+              employees: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              },
               schedules: {
                 type: Type.ARRAY,
                 items: {
@@ -120,7 +125,7 @@ async function startServer() {
                 }
               }
             },
-            required: ["schedules", "events"]
+            required: ["employees", "schedules", "events"]
           }
         }
       });
