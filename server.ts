@@ -75,6 +75,7 @@ async function startServer() {
       3. Eventos (events): Reuniões, manutenções, auditorias ou treinamentos com data, título, tipo e horário.
 
       Regras de Negócio:
+      - Mapeamento de Turnos: Se encontrar códigos como T2, T3 ou T4, converta-os obrigatoriamente: T2 = Manhã, T3 = Tarde, T4 = Noite.
       - Formato de Data: YYYY-MM-DD. Use o ano corrente (2026) se não especificado.
       - Formato de Horário: HH:MM.
       - Nomes: Use o nome completo ou como aparece na imagem, padronizando para Capitalize.
