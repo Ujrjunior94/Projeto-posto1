@@ -1,12 +1,19 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 
-// For ES modules path compatibility in development
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { GoogleGenAI, Type } from "@google/genai";
+
+// AI configuration
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      "User-Agent": "aistudio-build",
+    },
+  },
+});
 
 const BACKUP_FILE = path.join(process.cwd(), "backups.json");
 
@@ -51,6 +58,80 @@ async function startServer() {
   });
 
   // --- API ROUTES ---
+
+  // POST /api/gemini/import-schedule
+  app.post("/api/gemini/import-schedule", async (req, res) => {
+    try {
+      const { image, mimeType } = req.body;
+
+      if (!image || !mimeType) {
+        return res.status(400).json({ error: "Imagem e mimeType são obrigatórios." });
+      }
+
+      const prompt = `Analise a imagem da escala de trabalho de um posto de combustíveis e extraia as informações de turnos (schedules) e eventos (reuniões, treinamentos, manutenções).
+      Retorne um JSON seguindo exatamente este esquema:
+      {
+        "schedules": [
+          { "data": "YYYY-MM-DD", "turno": "Nome do Turno", "frentistaResponsavel": "Nome do Funcionário" }
+        ],
+        "events": [
+          { "data": "YYYY-MM-DD", "titulo": "Título do Evento", "tipo": "Treinamento|Reunião|Manutenção|Auditoria|Outro", "descricao": "Descrição curta", "horario": "HH:MM" }
+        ]
+      }
+      Se não houver eventos ou turnos, retorne arrays vazios. Certifique-se de que as datas estão no formato YYYY-MM-DD e horários em HH:MM.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: {
+          parts: [
+            { text: prompt },
+            { inlineData: { data: image, mimeType } }
+          ]
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              schedules: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    data: { type: Type.STRING },
+                    turno: { type: Type.STRING },
+                    frentistaResponsavel: { type: Type.STRING }
+                  },
+                  required: ["data", "turno", "frentistaResponsavel"]
+                }
+              },
+              events: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    data: { type: Type.STRING },
+                    titulo: { type: Type.STRING },
+                    tipo: { type: Type.STRING },
+                    descricao: { type: Type.STRING },
+                    horario: { type: Type.STRING }
+                  },
+                  required: ["data", "titulo", "tipo", "horario"]
+                }
+              }
+            },
+            required: ["schedules", "events"]
+          }
+        }
+      });
+
+      const extractedData = JSON.parse(response.text || "{}");
+      return res.json(extractedData);
+    } catch (error: any) {
+      console.error("Gemini Error:", error);
+      return res.status(500).json({ error: "Erro ao processar imagem com Gemini.", details: error.message });
+    }
+  });
 
   // GET /api/health - monitoring route
   app.get("/api/health", (req, res) => {

@@ -36,6 +36,7 @@ export interface Nozzle {
   tanqueId: string; // ID of the feeder fuel tank
   encerranteInicial: number; // in liters (hodômetro mecânico inicial)
   precoPorLitro: number; // e.g., 5.89
+  desconto?: number; // Optional discount in R$ per liter
 }
 
 export type ShiftName = "Turno A (Manhã)" | "Turno B (Tarde)" | "Turno C (Noite)" | string;
@@ -118,10 +119,11 @@ export interface ShiftShortage {
   id: string;
   shiftId: string;
   data: string;
-  valorTotalFalta: number;
+  valorTotalFalta: number; // Valor total da diferença
+  tipo: "Falta" | "Sobra";
   funcionariosEnvolvidos: string[]; // Lista de nomes de funcionários no turno
   rateioPorFuncionario: number; // valorTotalFalta / funcionariosEnvolvidos.length
-  status: "Pendente" | "Pago" | "Descontado";
+  status: "Pendente" | "Pago" | "Descontado" | "Concluído";
   observacoes?: string;
 }
 
@@ -208,6 +210,46 @@ export interface FuelDelivery {
   motorista?: string;
 }
 
+export interface LubricantProduct {
+  id: string;
+  nome: string;
+  quantidade: number;
+  unidade: "Frasco" | "Balde" | "Tambor" | "Caixa";
+  conferido: boolean;
+}
+
+export interface LubricantDelivery {
+  id: string;
+  dataRecebimento: string;
+  numeroNota: string;
+  fornecedor: string;
+  valorTotal: number;
+  produtos: LubricantProduct[];
+  statusConferencia: "Pendente" | "Parcial" | "Concluída";
+  observacoes?: string;
+  stationCnpj: string;
+}
+
+export interface DailyBalance {
+  id: string;
+  data: string; // YYYY-MM-DD
+  vendaCombustivel: number;
+  vendaLubrificantes: number;
+  outrasReceitas: number;
+  totalDespesas: number;
+  saldoFinal: number;
+  metodosPagamento: {
+    dinheiro: number;
+    cartaoCredito: number;
+    cartaoDebito: number;
+    pix: number;
+    prazo: number;
+  };
+  fechadoPor: string;
+  stationCnpj: string;
+  observacoes?: string;
+}
+
 export interface ActivityLog {
   id: string;
   date: string;
@@ -236,5 +278,7 @@ export interface AppState {
   deliveries: FuelDelivery[];
   audits: ActivityLog[];
   shortages: ShiftShortage[];
+  lubricantDeliveries: LubricantDelivery[];
+  dailyBalances: DailyBalance[];
 }
 

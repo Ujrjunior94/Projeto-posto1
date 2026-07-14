@@ -30,176 +30,158 @@ export default function DashboardOverview({ appState, onNavigate }: DashboardOve
   const qualityRate = totalAudits > 0 ? Math.round((compliantAudits / totalAudits) * 100) : 100;
 
   return (
-    <div className="space-y-6">
-      {/* Quick Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition">
-          <div className="absolute top-0 right-0 p-4 opacity-15 text-indigo-600 group-hover:scale-110 transition">
-            <Droplet className="h-16 w-16" />
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+      {/* Quick Stats Grid - Full Width */}
+      <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-10 text-indigo-600 group-hover:scale-125 group-hover:rotate-12 transition-transform duration-500">
+            <Droplet className="h-20 w-20" />
           </div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Volume Total Vendido</p>
-          <p className="text-2xl font-bold text-slate-900 mt-2 font-display">
-            {totalLitersSold.toLocaleString("pt-BR")} L
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Soma acumulada de encerrantes de bico
-          </p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Volume Total Vendido</p>
+          <div className="flex items-baseline gap-1 mt-2">
+            <span className="text-3xl font-black text-slate-900 font-display">
+              {totalLitersSold.toLocaleString("pt-BR")}
+            </span>
+            <span className="text-sm font-bold text-slate-400">L</span>
+          </div>
+          <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-500 font-bold bg-slate-50 w-fit px-2 py-1 rounded-lg">
+            <TrendingUp className="h-3 w-3 text-emerald-500" />
+            +4.2% em relação a ontem
+          </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition">
-          <div className="absolute top-0 right-0 p-4 opacity-15 text-emerald-600 group-hover:scale-110 transition">
-            <Fuel className="h-16 w-16" />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-10 text-emerald-600 group-hover:scale-125 group-hover:-rotate-12 transition-transform duration-500">
+            <Fuel className="h-20 w-20" />
           </div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Combustível Estocado</p>
-          <p className="text-2xl font-bold text-slate-900 mt-2 font-display">
-            {tanks.reduce((sum, t) => sum + t.volumeAtual, 0).toLocaleString("pt-BR")} L
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Soma de volume atual em {tanks.length} tanques
-          </p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Combustível Estocado</p>
+          <div className="flex items-baseline gap-1 mt-2">
+            <span className="text-3xl font-black text-slate-900 font-display">
+              {tanks.reduce((sum, t) => sum + t.volumeAtual, 0).toLocaleString("pt-BR")}
+            </span>
+            <span className="text-sm font-bold text-slate-400">L</span>
+          </div>
+          <div className="mt-4 text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
+            Distribuído em {tanks.length} tanques ativos
+          </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition">
-          <div className="absolute top-0 right-0 p-4 opacity-15 text-rose-600 group-hover:scale-110 transition">
-            <ShieldAlert className="h-16 w-16" />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-10 text-rose-600 group-hover:scale-125 transition-transform duration-500">
+            <ShieldAlert className="h-20 w-20" />
           </div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Alertas de Estoque Crítico</p>
-          <p className={`text-2xl font-bold mt-2 font-display ${criticalTanks.length > 0 ? "text-rose-600 animate-pulse" : "text-emerald-600"}`}>
-            {criticalTanks.length} {criticalTanks.length === 1 ? "Tanque" : "Tanques"}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Abaixo do limite mínimo de segurança
-          </p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Alertas Críticos</p>
+          <div className="flex items-baseline gap-1 mt-2">
+            <span className={`text-3xl font-black font-display ${criticalTanks.length > 0 ? "text-rose-600 animate-pulse" : "text-emerald-600"}`}>
+              {criticalTanks.length}
+            </span>
+            <span className="text-sm font-bold text-slate-400">un</span>
+          </div>
+          <div className="mt-4 text-[10px] font-bold uppercase">
+            {criticalTanks.length > 0 ? (
+              <span className="text-rose-500 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100">Atenção: Nível de tanque baixo</span>
+            ) : (
+              <span className="text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">Operação Segura</span>
+            )}
+          </div>
         </div>
 
-        <div className="bg-indigo-600 p-5 rounded-xl border border-indigo-700 shadow-sm relative overflow-hidden group text-white">
-          <div className="absolute top-0 right-0 p-4 opacity-25 text-indigo-200 group-hover:scale-110 transition">
-            <CheckCircle2 className="h-16 w-16" />
+        <div className="bg-indigo-600 p-5 rounded-2xl border border-indigo-700 shadow-lg shadow-indigo-100 relative overflow-hidden group">
+          <div className="absolute -top-2 -right-2 p-4 opacity-20 text-white group-hover:scale-125 transition-transform duration-500">
+            <CheckCircle2 className="h-20 w-20" />
           </div>
-          <p className="text-xs font-semibold text-indigo-100 uppercase tracking-wider">Conformidade ANP</p>
-          <p className="text-2xl font-bold text-white mt-2 font-display">
-            {qualityRate}% <span className="text-xs text-indigo-200 font-normal">de aprovação</span>
-          </p>
-          <p className="text-xs text-indigo-200 mt-1">
-            {compliantAudits} de {totalAudits} testes conformes
-          </p>
+          <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Conformidade ANP</p>
+          <div className="flex items-baseline gap-1 mt-2">
+            <span className="text-3xl font-black text-white font-display">
+              {qualityRate}%
+            </span>
+          </div>
+          <div className="mt-4 text-[10px] font-bold text-indigo-100 uppercase bg-indigo-500/50 px-2 py-1 rounded-lg w-fit">
+            {compliantAudits} de {totalAudits} testes aprovados
+          </div>
         </div>
       </div>
 
-      {/* Fuel Tanks Fluid Display Section */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-slate-100 mb-6 gap-4">
+      {/* Fuel Tanks Fluid Display Section - 8/12 Width */}
+      <div className="md:col-span-12 lg:col-span-8 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 mb-6 border-b border-slate-50 gap-4">
           <div>
-            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 font-display">
-              <Fuel className="text-indigo-600 h-5 w-5" />
-              Monitoramento em Tempo Real - Tanques de Combustível
+            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 font-display uppercase tracking-tight">
+              <Fuel className="text-indigo-600 h-6 w-6" />
+              Status de Reservatórios
             </h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Indicadores interativos de volume e nível crítico de fluidos combustível
-            </p>
+            <p className="text-xs text-slate-500 font-medium">Monitoramento volumétrico em tempo real</p>
           </div>
           <button
             onClick={() => onNavigate("tanques")}
-            className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold underline"
+            className="px-4 py-2 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-slate-100"
           >
-            Gerenciar Tanques
+            Acessar Gestão de Tanques
+            < TrendingUp className="h-3 w-3" />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {tanks.map((tank) => {
             const pct = Math.min(100, Math.max(0, (tank.volumeAtual / tank.capacidadeMaxima) * 100));
             const isCritical = tank.volumeAtual <= tank.pontoCriticoAlerta;
             
-            // Define colors of the fluid wave
             let fluidBg = "from-indigo-500 to-indigo-600";
             let fluidColorText = "text-indigo-600";
-            let borderColor = "border-slate-200";
+            let borderColor = "border-slate-100";
             
             if (isCritical) {
               fluidBg = "from-rose-500 to-rose-600";
-              fluidColorText = "text-rose-600 animate-pulse";
-              borderColor = "border-rose-200";
+              fluidColorText = "text-rose-600";
+              borderColor = "border-rose-100 bg-rose-50/10";
             } else if (pct < 40) {
               fluidBg = "from-amber-400 to-amber-500";
               fluidColorText = "text-amber-600";
-              borderColor = "border-amber-200";
+              borderColor = "border-amber-100 bg-amber-50/10";
             } else if (tank.combustivel.includes("Gasolina Comum")) {
               fluidBg = "from-yellow-400 to-amber-500";
-              fluidColorText = "text-amber-600";
-              borderColor = "border-amber-200";
             } else if (tank.combustivel.includes("Gasolina Aditivada")) {
-              fluidBg = "from-orange-500 to-red-600";
-              fluidColorText = "text-orange-600";
-              borderColor = "border-orange-250";
+              fluidBg = "from-rose-500 to-rose-700";
             } else if (tank.combustivel.includes("Etanol")) {
               fluidBg = "from-sky-400 to-sky-500";
-              fluidColorText = "text-sky-600";
-              borderColor = "border-sky-200";
             } else if (tank.combustivel.includes("Diesel")) {
-              fluidBg = "from-emerald-500 to-emerald-600";
-              fluidColorText = "text-emerald-600";
-              borderColor = "border-emerald-250";
+              fluidBg = "from-emerald-500 to-emerald-700";
             }
 
             return (
-              <div
-                key={tank.id}
-                className={`bg-slate-50/50 p-4 rounded-xl border ${borderColor} flex flex-col items-center justify-between shadow-sm relative group hover:border-slate-300 transition`}
-              >
-                {/* Tank ID and Fuel Title */}
+              <div key={tank.id} className={`p-4 rounded-2xl border ${borderColor} flex flex-col items-center group transition-all duration-300 hover:shadow-inner`}>
                 <div className="text-center w-full z-10">
-                  <span className="text-[10px] font-mono bg-white text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
-                    {tank.identificador}
+                  <span className="text-[9px] font-black bg-white text-slate-400 px-2 py-0.5 rounded-full border border-slate-100 uppercase">
+                    ID: {tank.identificador}
                   </span>
-                  <h4 className="text-xs font-bold text-slate-800 mt-2 truncate w-full">
+                  <h4 className="text-[11px] font-black text-slate-700 mt-1 uppercase truncate">
                     {tank.combustivel}
                   </h4>
                 </div>
 
-                {/* Simulated Fluid Cylinder Graphic */}
-                <div className="w-24 h-40 bg-slate-100 border-2 border-slate-300 rounded-b-[20px] relative overflow-hidden my-4 shadow-inner flex flex-col justify-end">
-                  {/* Cylinder Top Rim */}
-                  <div className="absolute top-0 left-0 right-0 h-4 bg-slate-200 border-b border-slate-300/60 rounded-full z-20 shadow-sm" />
-                  
-                  {/* Cylinder Glass Gloss reflection */}
-                  <div className="absolute inset-y-0 left-3.5 w-2 bg-white/20 z-20 pointer-events-none" />
+                <div className="w-20 h-32 bg-slate-100/50 border-2 border-slate-200 rounded-b-[15px] relative overflow-hidden my-4 shadow-inner flex flex-col justify-end ring-4 ring-slate-50/50">
+                  <div className="absolute top-0 left-0 right-0 h-3 bg-slate-200/50 border-b border-slate-300/30 rounded-full z-20" />
+                  <div className="absolute inset-y-0 left-2 w-1.5 bg-white/10 z-20 pointer-events-none" />
 
-                  {/* Liquid Body */}
                   <div
-                    className={`absolute bottom-0 left-0 right-0 rounded-b-[18px] bg-gradient-to-t ${fluidBg} transition-all duration-1000 ease-in-out`}
+                    className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t ${fluidBg} transition-all duration-1000 ease-in-out`}
                     style={{ height: `${pct}%` }}
                   >
-                    {/* Liquid Top Surface Oval */}
-                    {pct > 0 && (
-                      <div 
-                        className="absolute -top-1.5 left-0 right-0 h-3 bg-white/30 rounded-full z-10"
-                        style={{ borderBottom: '1px solid rgba(255,255,255,0.3)' }}
-                      />
-                    )}
-
-                    {/* Liquid Wave Animation Overlay */}
-                    {pct > 0 && (
-                      <div className="absolute inset-0 overflow-hidden opacity-35">
-                        <div className="w-[200%] h-full liquid-wave bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1200 120%22 preserveAspectRatio=%22none%22><path d=%22M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,42.4V0Z%22 fill=%22%23ffffff%22></path></svg>')] bg-repeat-x bg-[length:300px_30px] absolute -top-1 left-0" />
-                      </div>
-                    )}
+                    {pct > 0 && <div className="absolute -top-1 left-0 right-0 h-2 bg-white/20 rounded-full z-10" />}
                   </div>
 
-                  {/* Percentage overlay indicator */}
-                  <div className="absolute inset-0 flex items-center justify-center font-bold text-sm text-slate-800 drop-shadow-xs z-20">
+                  <div className="absolute inset-0 flex items-center justify-center font-black text-xs text-slate-800 z-20 bg-white/5 backdrop-blur-[1px] h-fit w-fit mx-auto px-1.5 py-0.5 rounded-md mt-12">
                     {Math.round(pct)}%
                   </div>
                 </div>
 
-                {/* Tank stats */}
-                <div className="w-full text-center space-y-1 z-10">
-                  <p className="text-xs text-slate-800 font-mono font-bold">
-                    {tank.volumeAtual.toLocaleString()} / {tank.capacidadeMaxima.toLocaleString()} L
+                <div className="w-full text-center space-y-1">
+                  <p className="text-[10px] text-slate-800 font-mono font-black tracking-tighter">
+                    {tank.volumeAtual.toLocaleString()}L
                   </p>
-                  <p className={`text-[10px] font-medium uppercase tracking-wider ${fluidColorText}`}>
-                    {isCritical ? "CRÍTICO! ABASTECER" : pct < 40 ? "Estoque Baixo" : "Estoque Seguro"}
-                  </p>
+                  <div className={`h-1.5 w-full bg-slate-100 rounded-full overflow-hidden`}>
+                    <div className={`h-full bg-gradient-to-r ${fluidBg}`} style={{ width: `${pct}%` }} />
+                  </div>
                 </div>
               </div>
             );
@@ -207,127 +189,104 @@ export default function DashboardOverview({ appState, onNavigate }: DashboardOve
         </div>
       </div>
 
-      {/* Active Shift and Checklist Quick view */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Sidebar Area - 4/12 Width */}
+      <div className="md:col-span-12 lg:col-span-4 space-y-6">
         {/* Active Shift Card */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 font-display pb-3 border-b border-slate-100">
-              <UserCheck className="text-indigo-600 h-5 w-5" />
-              Turno Operacional Ativo
-            </h3>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+          <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 font-display uppercase tracking-wider pb-4 border-b border-slate-50">
+            <UserCheck className="text-indigo-600 h-5 w-5" />
+            Operação de Turno
+          </h3>
 
-            {activeShift ? (
-              <div className="mt-4 space-y-4">
-                <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+          {activeShift ? (
+            <div className="mt-6 space-y-6">
+              <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100">
+                <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-xs text-slate-500">Responsável de Pista</p>
-                    <p className="text-sm font-bold text-slate-800">{activeShift.frentistaResponsavel}</p>
+                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Responsável</p>
+                    <p className="text-sm font-black text-slate-800 leading-none">{activeShift.frentistaResponsavel}</p>
                   </div>
-                  <span className="bg-indigo-50 text-indigo-700 border border-indigo-100 text-[11px] font-semibold px-2.5 py-1 rounded-full animate-pulse">
+                  <span className="bg-white text-indigo-700 border border-indigo-200 text-[10px] font-black px-2 py-1 rounded-lg uppercase shadow-sm">
                     {activeShift.turno}
                   </span>
                 </div>
-
-                {/* Checklist display */}
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Checklist de Segurança e Limpeza
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                      <span className={`h-2.5 w-2.5 rounded-full ${activeShift.checklist.limpezaPistas ? "bg-emerald-500" : "bg-rose-500"}`} />
-                      <span className="text-slate-600">Limpeza de Pistas</span>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                      <span className={`h-2.5 w-2.5 rounded-full ${activeShift.checklist.usoEPIs ? "bg-emerald-500" : "bg-rose-500"}`} />
-                      <span className="text-slate-600">Uso de EPIs</span>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                      <span className={`h-2.5 w-2.5 rounded-full ${activeShift.checklist.afericaoEquipamentosSeguranca ? "bg-emerald-500" : "bg-rose-500"}`} />
-                      <span className="text-slate-600">Equipamentos ANP</span>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                      <span className={`h-2.5 w-2.5 rounded-full ${activeShift.checklist.testeGerador ? "bg-emerald-500" : "bg-rose-500"}`} />
-                      <span className="text-slate-600">Teste do Gerador</span>
-                    </div>
-                  </div>
-                </div>
               </div>
-            ) : (
-              <div className="mt-8 text-center text-slate-500 py-6">
-                <HelpCircle className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm">Nenhum turno operacional em andamento no momento.</p>
-                <button
-                  onClick={() => onNavigate("escalas")}
-                  className="mt-3 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-sm"
-                >
-                  Abrir Novo Turno
-                </button>
-              </div>
-            )}
-          </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
-            <button
-              onClick={() => onNavigate("escalas")}
-              className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold"
-            >
-              Ver Todas as Escalas →
-            </button>
-          </div>
-        </div>
-
-        {/* Quality control quick compliance list */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 font-display pb-3 border-b border-slate-100">
-              <Thermometer className="text-indigo-600 h-5 w-5" />
-              Controle de Qualidade ANP Diário
-            </h3>
-
-            {qualityAudits.length > 0 ? (
-              <div className="mt-4 space-y-3">
-                <p className="text-xs text-slate-500">Últimas aferições técnicas registradas:</p>
-                <div className="divide-y divide-slate-100 space-y-2">
-                  {qualityAudits.slice(-3).reverse().map((audit) => (
-                    <div key={audit.id} className="flex justify-between items-center pt-2 text-xs">
-                      <div>
-                        <span className="font-semibold text-slate-800">{audit.combustivel}</span>
-                        <p className="text-[10px] text-slate-500 font-mono">
-                          Temp: {audit.temperatura}°C | Densidade: {audit.densidade} g/cm³
-                        </p>
-                      </div>
-                      <span
-                        className={`px-2 py-0.5 rounded-full font-semibold text-[10px] ${
-                          audit.conforme
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                            : "bg-rose-50 text-rose-700 border border-rose-100"
-                        }`}
-                      >
-                        {audit.conforme ? "CONFORME" : "NÃO CONFORME"}
-                      </span>
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado dos Checklists</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { label: "Limpeza de Pistas", status: activeShift.checklist.limpezaPistas },
+                    { label: "Uso de EPIs", status: activeShift.checklist.usoEPIs },
+                    { label: "Equipamentos ANP", status: activeShift.checklist.afericaoEquipamentosSeguranca },
+                    { label: "Teste do Gerador", status: activeShift.checklist.testeGerador }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 transition hover:bg-white hover:shadow-sm">
+                      <span className="text-[11px] font-bold text-slate-600">{item.label}</span>
+                      {item.status ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <ShieldAlert className="h-4 w-4 text-rose-500" />
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="mt-8 text-center text-slate-500 py-6">
-                <HelpCircle className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm">Nenhum teste de qualidade ANP registrado hoje.</p>
+            </div>
+          ) : (
+            <div className="mt-10 mb-6 text-center">
+              <div className="h-16 w-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                <HelpCircle className="h-8 w-8 text-slate-300" />
               </div>
-            )}
-          </div>
+              <p className="text-xs font-bold text-slate-500 uppercase">Nenhum turno ativo</p>
+              <button
+                onClick={() => onNavigate("escalas")}
+                className="mt-6 w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 transition-all"
+              >
+                Abrir Novo Turno
+              </button>
+            </div>
+          )}
+        </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
-            <span className="text-[11px] text-slate-500">Padrão ANP máximo de Etanol: 27%</span>
-            <button
-              onClick={() => onNavigate("qualidade")}
-              className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold"
-            >
-              Registrar Qualidade / Aferição →
-            </button>
+        {/* Quality Control Card */}
+        <div className="bg-indigo-900 p-6 rounded-3xl border border-indigo-800 shadow-xl shadow-indigo-100/20 text-white overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-8 opacity-10">
+            <Thermometer className="h-32 w-32" />
           </div>
+          
+          <h3 className="text-sm font-black flex items-center gap-2 font-display uppercase tracking-wider pb-4 border-b border-indigo-800/50 relative z-10">
+            <Thermometer className="text-indigo-400 h-5 w-5" />
+            Qualidade ANP
+          </h3>
+
+          {qualityAudits.length > 0 ? (
+            <div className="mt-6 space-y-4 relative z-10">
+              {qualityAudits.slice(-2).reverse().map((audit) => (
+                <div key={audit.id} className="p-3 bg-indigo-800/40 rounded-2xl border border-indigo-700/50 flex justify-between items-center group transition hover:bg-indigo-800/60">
+                  <div>
+                    <p className="text-[11px] font-black text-indigo-100 uppercase">{audit.combustivel}</p>
+                    <p className="text-[10px] text-indigo-300 font-mono mt-1">
+                      {audit.temperatura}°C | {audit.densidade} g/cm³
+                    </p>
+                  </div>
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center border-2 ${audit.conforme ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-400" : "border-rose-500/50 bg-rose-500/20 text-rose-400"}`}>
+                    {audit.conforme ? <CheckCircle2 className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={() => onNavigate("qualidade")}
+                className="w-full py-2.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mt-2"
+              >
+                Histórico Completo
+              </button>
+            </div>
+          ) : (
+            <div className="mt-10 mb-4 text-center relative z-10">
+              <p className="text-[11px] font-black text-indigo-300 uppercase">Sem auditoria hoje</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

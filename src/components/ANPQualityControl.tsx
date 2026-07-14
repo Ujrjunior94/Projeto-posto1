@@ -17,8 +17,11 @@ import {
   Trash2,
   FileText,
   AlertTriangle,
+  FileDown,
 } from "lucide-react";
 import { FUEL_TYPES } from "./TanksManagement";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export function getDensityCorrectionFactor(fuel: FuelType): number {
   if (fuel === "Etanol") return 0.00084;
@@ -163,7 +166,7 @@ export default function ANPQualityControl({
   // Nozzle calibration form state
   const [calNozzleId, setCalNozzleId] = useState("");
   const [calVolumeMedido, setCalVolumeMedido] = useState(20.0);
-  const [calDesvioMl, setCalDesvioMl] = useState(0); // in mL (-100 to 100)
+  const [calDesvioMl, setCalDesvioMl] = useState(0); // in mL (-120 to 120, step 20)
   const [calOperador, setCalOperador] = useState("");
 
   // Chemical quality audit state
@@ -335,6 +338,72 @@ export default function ANPQualityControl({
     onAddAuditLog("DOWNLOAD", "Qualidade", `Exportou CSV com ${rowsToExport.length} aferições de vazão`, "Regular");
   };
 
+  // Export selected calibrations to PDF
+  const handleExportSelectedPDF = () => {
+    const selectedIds = Object.keys(selectedCalibrations).filter((id) => selectedCalibrations[id]);
+    if (selectedIds.length === 0) {
+      alert("Selecione ao menos uma aferição na tabela abaixo para exportar.");
+      return;
+    }
+
+    const rowsToExport = calibrations.filter((c) => selectedIds.includes(c.id));
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFontSize(18);
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text("Relatório de Aferição de Bicos", 14, 22);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139); // slate-500
+    doc.text(`Posto CNPJ: ${cnpjPosto}`, 14, 30);
+    doc.text(`Data de Emissão: ${new Date().toLocaleDateString("pt-BR")} ${new Date().toLocaleTimeString("pt-BR")}`, 14, 35);
+
+    // Table
+    const tableData = rowsToExport.map((c) => {
+      const nozzle = nozzles.find((n) => n.id === c.nozzleId);
+      const tank = nozzle ? appState.tanks.find(t => t.id === nozzle.tanqueId) : null;
+      const fuelInfo = tank ? `(${tank.combustivel})` : "";
+      
+      return [
+        c.data.split("-").reverse().join("/"),
+        nozzle ? `Bico ${nozzle.numeroBico} ${fuelInfo}` : c.nozzleId,
+        `R$ ${(c.valorReais || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+        `${c.desvioMl > 0 ? "+" : ""}${c.desvioMl} mL`,
+        c.conforme ? "CONFORME" : "NÃO CONFORME",
+        c.operadorResponsavel,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 45,
+      head: [["Data", "Bico / Produto", "Valor (R$)", "Desvio", "Veredicto", "Responsável"]],
+      body: tableData,
+      headStyles: { fillColor: [79, 70, 229] },
+      styles: { fontSize: 8, cellPadding: 3 },
+      columnStyles: {
+        3: { fontStyle: "bold" },
+        4: { fontStyle: "bold" },
+      },
+    });
+
+    // Summary
+    const finalY = (doc as any).lastAutoTable.finalY || 150;
+    const totalVolume = rowsToExport.reduce((acc, c) => acc + c.volumeMedido, 0);
+    const totalValor = rowsToExport.reduce((acc, c) => acc + (c.valorReais || 0), 0);
+
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Total de Aferições: ${rowsToExport.length}`, 14, finalY + 15);
+    doc.text(`Volume Total Aferido: ${totalVolume} Litros`, 14, finalY + 22);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text(`VALOR TOTAL ACUMULADO: R$ ${totalValor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, 14, finalY + 32);
+
+    doc.save(`relatorio_afericoes_${Date.now()}.pdf`);
+    onAddAuditLog("DOWNLOAD", "Qualidade", `Exportou PDF com ${rowsToExport.length} aferições de vazão`, "Regular");
+  };
+
   const handleSelectAllCalibrations = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       const newSel: { [key: string]: boolean } = {};
@@ -478,10 +547,13 @@ export default function ANPQualityControl({
                   <input
                     type="number"
                     required
+                    min="-120"
+                    max="120"
+                    step="20"
                     value={calDesvioMl}
                     onChange={(e) => setCalDesvioMl(Number(e.target.value))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold text-slate-800"
-                    placeholder="Ex: -25 ou 30"
+                    placeholder="Ex: -40, 0, 60..."
                   />
                 </div>
               </div>
@@ -527,13 +599,22 @@ export default function ANPQualityControl({
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                 <h3 className="text-sm font-semibold text-slate-800">Histórico de Aferição de Bicos</h3>
-                <button
-                  onClick={handleExportSelectedCSV}
-                  className="px-3 py-1.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Exportar Selecionados (CSV)
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleExportSelectedCSV}
+                    className="px-3 py-1.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded-xl transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    CSV
+                  </button>
+                  <button
+                    onClick={handleExportSelectedPDF}
+                    className="px-3 py-1.5 bg-indigo-600 border border-indigo-700 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-xl transition flex items-center gap-1 cursor-pointer shadow-sm"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    PDF
+                  </button>
+                </div>
               </div>
 
               {/* Cumulative summary for selected calibrations */}

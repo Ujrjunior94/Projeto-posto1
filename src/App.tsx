@@ -18,6 +18,8 @@ import CloudSyncPanel from "./components/CloudSyncPanel";
 import LMCManagement from "./components/LMCManagement";
 import AuditorLog from "./components/AuditorLog";
 import CashierShortage from "./components/CashierShortage";
+import LubricantDeliveries from "./components/LubricantDeliveries";
+import DailyBalance from "./components/DailyBalance";
 
 import {
   LayoutDashboard,
@@ -37,6 +39,8 @@ import {
   History,
   BookOpen,
   AlertTriangle,
+  Droplets,
+  BarChart3,
 } from "lucide-react";
 
 const STORAGE_KEY = "meu_posto_app_state";
@@ -160,6 +164,14 @@ export default function App() {
     setAppState((prev) => ({ ...prev, shortages }));
   };
 
+  const handleUpdateLubricants = (lubricantDeliveries: typeof appState.lubricantDeliveries) => {
+    setAppState((prev) => ({ ...prev, lubricantDeliveries }));
+  };
+
+  const handleUpdateBalances = (dailyBalances: typeof appState.dailyBalances) => {
+    setAppState((prev) => ({ ...prev, dailyBalances }));
+  };
+
   const handleAddAuditLog = (actionType: string, target: string, details: string, status: string = "Regular") => {
     const newLog = {
       id: "log_" + Date.now() + "_" + Math.floor(Math.random() * 100),
@@ -206,8 +218,10 @@ export default function App() {
   const navigationItems = [
     { id: "dashboard", name: "Dashboard", icon: LayoutDashboard, frentistaAllowed: true },
     { id: "caixa", name: "Leitura de Bicos", icon: ClipboardList, frentistaAllowed: true },
+    { id: "balanco", name: "Balanço Diário", icon: BarChart3, frentistaAllowed: false },
     { id: "escalas", name: "Escala & Checklists", icon: ClipboardList, frentistaAllowed: true },
     { id: "tanques", name: "Controle de Tanques", icon: Fuel, frentistaAllowed: false },
+    { id: "lubrificantes", name: "Recebimento de Lubrif.", icon: Droplets, frentistaAllowed: true },
     { id: "faltas", name: "Faltas de Caixa", icon: AlertTriangle, frentistaAllowed: true },
     { id: "bicos", name: "Bicos & Bombas", icon: Activity, frentistaAllowed: false },
     { id: "qualidade", name: "Qualidade ANP", icon: Thermometer, frentistaAllowed: false },
@@ -441,6 +455,7 @@ export default function App() {
               appState={appState}
               userRole={currentUser.cargo}
               onUpdateNozzles={handleUpdateNozzles}
+              onAddAuditLog={handleAddAuditLog}
             />
           )}
 
@@ -465,11 +480,29 @@ export default function App() {
             />
           )}
 
+          {activeTab === "balanco" && (
+            <DailyBalance
+              appState={appState}
+              userRole={currentUser.cargo}
+              onUpdateBalances={handleUpdateBalances}
+              onAddAuditLog={handleAddAuditLog}
+            />
+          )}
+
           {activeTab === "faltas" && (
             <CashierShortage
               appState={appState}
               userRole={currentUser.cargo}
               onUpdateShortages={handleUpdateShortages}
+              onAddAuditLog={handleAddAuditLog}
+            />
+          )}
+
+          {activeTab === "lubrificantes" && (
+            <LubricantDeliveries
+              appState={appState}
+              userRole={currentUser.cargo}
+              onUpdateLubricants={handleUpdateLubricants}
               onAddAuditLog={handleAddAuditLog}
             />
           )}

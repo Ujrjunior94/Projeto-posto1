@@ -120,6 +120,97 @@ export default function ShiftsChecklists({
   const [isDragging, setIsDragging] = useState(false);
   const [selectedOccImage, setSelectedOccImage] = useState<string | null>(null);
 
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleImportFromPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    onAddAuditLog("IMPORT", "Escala", "Iniciou importação de escala via foto", "Regular");
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(",")[1];
+        const mimeType = file.type;
+
+        const response = await fetch("/api/gemini/import-schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64, mimeType }),
+        });
+
+        if (!response.ok) throw new Error("Erro na API de importação");
+
+        const data = await response.json();
+        
+        // Merge recognized data into existing shifts
+        const newShifts = [...shifts];
+        
+        // Process schedules
+        if (data.schedules && data.schedules.length > 0) {
+          data.schedules.forEach((s: any) => {
+            const shiftId = "s_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+            newShifts.push({
+              id: shiftId,
+              data: s.data,
+              turno: s.turno,
+              frentistaResponsavel: s.frentistaResponsavel,
+              checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+              status: "Planejado",
+              stationCnpj: cnpjPosto,
+              dayOfWeek: `Dia ${s.data.split("-")[2]}`
+            });
+          });
+        }
+
+        // Process events
+        if (data.events && data.events.length > 0) {
+          data.events.forEach((evt: any) => {
+             const eventId = "evt_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+             const newEvent = {
+               id: eventId,
+               titulo: evt.titulo,
+               tipo: evt.tipo,
+               descricao: evt.descricao || "",
+               horario: evt.horario
+             };
+
+             const existingShift = newShifts.find(s => s.data === evt.data);
+             if (existingShift) {
+               existingShift.events = [...(existingShift.events || []), newEvent];
+             } else {
+               newShifts.push({
+                 id: "s_evt_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                 data: evt.data,
+                 turno: "Evento Geral",
+                 frentistaResponsavel: "Evento Geral",
+                 checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+                 status: "Planejado",
+                 stationCnpj: cnpjPosto,
+                 dayOfWeek: `Dia ${evt.data.split("-")[2]}`,
+                 events: [newEvent]
+               });
+             }
+          });
+        }
+
+        onUpdateShifts(newShifts);
+        onAddAuditLog("IMPORT", "Escala", `Importação concluída: ${data.schedules?.length || 0} turnos e ${data.events?.length || 0} eventos reconhecidos`, "Regular");
+        alert("Escala importada com sucesso!");
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao importar escala com IA. Verifique se o arquivo é uma imagem válida.");
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const [showAddEventForm, setShowAddEventForm] = useState(false);
   const [evtTitle, setEvtTitle] = useState("");
   const [evtType, setEvtType] = useState<"Treinamento" | "Reunião" | "Manutenção" | "Auditoria" | "Outro">("Reunião");
@@ -971,6 +1062,32 @@ export default function ShiftsChecklists({
                       Limpar
                     </button>
                   </div>
+                  
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleImportFromPhoto}
+                  />
+
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isImporting}
+                    className={`w-full ${isImporting ? "bg-slate-100 text-slate-400" : "bg-emerald-600 hover:bg-emerald-500 text-white"} font-black py-2.5 px-2 rounded-xl text-[10px] text-center transition flex items-center justify-center gap-2 cursor-pointer shadow-md mt-2`}
+                  >
+                    {isImporting ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        Processando com IA...
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="h-4 w-4" />
+                        Importar via Foto (IA)
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>

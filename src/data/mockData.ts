@@ -414,5 +414,85 @@ export const INITIAL_STATE: AppState = {
       stationCnpj: "12.345.678/0001-99"
     }
   ],
-  shortages: []
+  shortages: [
+    {
+      id: "sh_1",
+      shiftId: "2026-07-10_Turno A (Manhã)",
+      data: "2026-07-10",
+      valorTotalFalta: 45.00,
+      tipo: "Falta",
+      funcionariosEnvolvidos: ["Marcos Souza Lima"],
+      rateioPorFuncionario: 45.00,
+      status: "Pendente",
+      observacoes: "Diferença não identificada no fechamento físico."
+    },
+    {
+      id: "sh_2",
+      shiftId: "2026-07-11_Turno B (Tarde)",
+      data: "2026-07-11",
+      valorTotalFalta: 12.50,
+      tipo: "Sobra",
+      funcionariosEnvolvidos: ["Marcos Souza Lima"],
+      rateioPorFuncionario: 12.50,
+      status: "Concluído",
+      observacoes: "Sobra de caixa identificada após conferência de envelopes."
+    }
+  ],
+  lubricantDeliveries: [],
+  dailyBalances: [
+    {
+      id: "bal_1",
+      data: "2026-07-10",
+      vendaCombustivel: 15450.50,
+      vendaLubrificantes: 840.00,
+      outrasReceitas: 1200.00,
+      totalDespesas: 2300.00,
+      saldoFinal: 15190.50,
+      metodosPagamento: {
+        dinheiro: 4500.00,
+        cartaoCredito: 6000.00,
+        cartaoDebito: 3000.00,
+        pix: 1500.00,
+        prazo: 450.50
+      },
+      fechadoPor: "Mariana Costa Santos",
+      stationCnpj: "12.345.678/0001-99"
+    },
+    {
+      id: "bal_2",
+      data: "2026-07-11",
+      vendaCombustivel: 12100.20,
+      vendaLubrificantes: 560.00,
+      outrasReceitas: 950.00,
+      totalDespesas: 1800.00,
+      saldoFinal: 11810.20,
+      metodosPagamento: {
+        dinheiro: 3200.00,
+        cartaoCredito: 5000.00,
+        cartaoDebito: 2500.00,
+        pix: 1000.00,
+        prazo: 410.20
+      },
+      fechadoPor: "Mariana Costa Santos",
+      stationCnpj: "12.345.678/0001-99"
+    },
+    {
+      id: "bal_3",
+      data: "2026-07-12",
+      vendaCombustivel: 18900.00,
+      vendaLubrificantes: 1200.00,
+      outrasReceitas: 1500.00,
+      totalDespesas: 3100.00,
+      saldoFinal: 18500.00,
+      metodosPagamento: {
+        dinheiro: 5500.00,
+        cartaoCredito: 7500.00,
+        cartaoDebito: 3500.00,
+        pix: 2000.00,
+        prazo: 400.00
+      },
+      fechadoPor: "Mariana Costa Santos",
+      stationCnpj: "12.345.678/0001-99"
+    }
+  ]
 };

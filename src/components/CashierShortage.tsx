@@ -14,7 +14,11 @@ import {
   CheckCircle, 
   AlertCircle,
   Calculator,
-  ArrowRight
+  ArrowRight,
+  TrendingUp,
+  TrendingDown,
+  Info,
+  X
 } from "lucide-react";
 
 interface CashierShortageProps {
@@ -42,6 +46,7 @@ export default function CashierShortage({
   const [showAddForm, setShowAddForm] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [shiftTurn, setShiftTurn] = useState<string>(SHIFT_TYPES[0]);
+  const [tipo, setTipo] = useState<"Falta" | "Sobra">("Falta");
   const [valorTotal, setValorTotal] = useState<number>(0);
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [observacoes, setObservacoes] = useState("");
@@ -69,12 +74,12 @@ export default function CashierShortage({
     setSuccess("");
 
     if (valorTotal <= 0) {
-      setError("O valor da falta deve ser maior que zero.");
+      setError(`O valor da ${tipo.toLowerCase()} deve ser maior que zero.`);
       return;
     }
 
     if (selectedEmployees.length === 0) {
-      setError("Selecione ao menos um funcionário para o rateio.");
+      setError("Selecione ao menos um funcionário para o registro.");
       return;
     }
 
@@ -85,6 +90,7 @@ export default function CashierShortage({
       shiftId: date + "_" + shiftTurn,
       data: date,
       valorTotalFalta: Number(valorTotal),
+      tipo,
       funcionariosEnvolvidos: selectedEmployees,
       rateioPorFuncionario: rateio,
       status: "Pendente",
@@ -92,9 +98,9 @@ export default function CashierShortage({
     };
 
     onUpdateShortages([...shortages, newShortage]);
-    onAddAuditLog("CREATE", "Financeiro", `Registrou falta de caixa de R$ ${valorTotal} no dia ${date} (${shiftTurn}). Rateio: R$ ${rateio.toFixed(2)} p/ pessoa.`, "Regular");
+    onAddAuditLog("CREATE", "Financeiro", `Registrou ${tipo.toLowerCase()} de caixa de R$ ${valorTotal} no dia ${date} (${shiftTurn}).`, "Regular");
 
-    setSuccess("Falta de caixa registrada com sucesso!");
+    setSuccess(`${tipo} de caixa registrada com sucesso!`);
     setTimeout(() => {
       setSuccess("");
       setShowAddForm(false);
@@ -103,21 +109,22 @@ export default function CashierShortage({
   };
 
   const handleDeleteShortage = (id: string) => {
-    if (confirm("Deseja realmente excluir este registro de falta de caixa?")) {
+    if (confirm("Deseja realmente excluir este registro?")) {
       const filtered = shortages.filter(s => s.id !== id);
       onUpdateShortages(filtered);
-      onAddAuditLog("DELETE", "Financeiro", `Excluiu registro de falta de caixa ID ${id}`, "Regular");
+      onAddAuditLog("DELETE", "Financeiro", `Excluiu registro de caixa ID ${id}`, "Regular");
     }
   };
 
   const handleUpdateStatus = (id: string, newStatus: ShiftShortage["status"]) => {
     const updated = shortages.map(s => s.id === id ? { ...s, status: newStatus } : s);
     onUpdateShortages(updated);
-    onAddAuditLog("UPDATE", "Financeiro", `Alterou status da falta ID ${id} para ${newStatus}`, "Regular");
+    onAddAuditLog("UPDATE", "Financeiro", `Alterou status do registro ID ${id} para ${newStatus}`, "Regular");
   };
 
   const resetForm = () => {
     setValorTotal(0);
+    setTipo("Falta");
     setSelectedEmployees([]);
     setObservacoes("");
   };
@@ -127,11 +134,11 @@ export default function CashierShortage({
       <div className="flex justify-between items-center pb-4 border-b border-slate-200">
         <div>
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
-            <DollarSign className="text-rose-600 h-6 w-6" />
-            Falta de Caixa por Turno
+            <DollarSign className="text-indigo-600 h-6 w-6" />
+            Diferenças de Caixa (Faltas/Sobras)
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Controle de quebras de caixa, identificação de responsáveis pela escala e rateio de valores
+            Controle de quebras e excessos de caixa, rateio entre funcionários e gestão de status
           </p>
         </div>
         {!isReadOnly && (
@@ -139,8 +146,8 @@ export default function CashierShortage({
             onClick={() => setShowAddForm(!showAddForm)}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-bold text-sm shadow-md cursor-pointer"
           >
-            {showAddForm ? <Trash2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {showAddForm ? "Cancelar" : "Lançar Falta"}
+            {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {showAddForm ? "Cancelar" : "Lançar Diferença"}
           </button>
         )}
       </div>
@@ -163,10 +170,33 @@ export default function CashierShortage({
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm animate-in slide-in-from-top duration-300">
           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-6 flex items-center gap-2">
             <Calculator className="h-4 w-4 text-indigo-600" />
-            Novo Registro de Falta
+            Novo Registro de Diferença
           </h3>
 
           <form onSubmit={handleCreateShortage} className="space-y-6">
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-xl w-fit">
+              <button
+                type="button"
+                onClick={() => setTipo("Falta")}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                  tipo === "Falta" ? "bg-rose-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-200"
+                }`}
+              >
+                <TrendingDown className="h-3.5 w-3.5" />
+                Falta de Caixa
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipo("Sobra")}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                  tipo === "Sobra" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-200"
+                }`}
+              >
+                <TrendingUp className="h-3.5 w-3.5" />
+                Sobra de Caixa
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Data do Ocorrido</label>
@@ -194,7 +224,7 @@ export default function CashierShortage({
               </div>
 
               <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Valor Total da Falta (R$)</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Valor da {tipo} (R$)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-slate-400 text-sm font-bold">R$</span>
                   <input
@@ -204,7 +234,9 @@ export default function CashierShortage({
                     required
                     value={valorTotal}
                     onChange={(e) => setValorTotal(Number(e.target.value))}
-                    className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className={`w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 outline-none ${
+                      tipo === "Falta" ? "focus:ring-rose-500" : "focus:ring-emerald-500"
+                    }`}
                     placeholder="0,00"
                   />
                 </div>
@@ -215,7 +247,7 @@ export default function CashierShortage({
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-bold text-slate-600 uppercase flex items-center gap-2">
                   <Users className="h-4 w-4" />
-                  Funcionários Responsáveis (Rateio)
+                  Funcionários Responsáveis {tipo === "Falta" && "(Rateio)"}
                 </h4>
                 <button
                   type="button"
@@ -242,12 +274,14 @@ export default function CashierShortage({
                       </span>
                     ))}
                   </div>
-                  <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
-                    <span className="text-slate-500">Valor do rateio individual:</span>
-                    <span className="font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-lg">
-                      R$ {(valorTotal / selectedEmployees.length || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / pessoa
-                    </span>
-                  </div>
+                  {tipo === "Falta" && (
+                    <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Valor do rateio individual:</span>
+                      <span className="font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-lg">
+                        R$ {(valorTotal / selectedEmployees.length || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / pessoa
+                      </span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-center py-4 text-xs text-slate-400 italic">
@@ -283,9 +317,11 @@ export default function CashierShortage({
 
             <button
               type="submit"
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 cursor-pointer"
+              className={`w-full py-3 text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
+                tipo === "Falta" ? "bg-rose-600 hover:bg-rose-700 shadow-rose-200" : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
+              }`}
             >
-              Confirmar Lançamento de Falta
+              Confirmar Registro de {tipo}
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>
@@ -294,13 +330,13 @@ export default function CashierShortage({
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
         <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-          <h3 className="text-sm font-bold text-slate-800">Histórico de Faltas</h3>
-          <div className="flex gap-2">
+          <h3 className="text-sm font-bold text-slate-800">Histórico de Diferenças</h3>
+          <div className="flex gap-4">
             <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
-              <div className="h-2 w-2 rounded-full bg-amber-400" /> Pendente
+              <div className="h-2 w-2 rounded-full bg-rose-500" /> Falta
             </span>
             <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
-              <div className="h-2 w-2 rounded-full bg-emerald-400" /> Pago
+              <div className="h-2 w-2 rounded-full bg-emerald-500" /> Sobra
             </span>
           </div>
         </div>
@@ -310,9 +346,9 @@ export default function CashierShortage({
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
                 <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Data / Turno</th>
+                <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Tipo</th>
                 <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Valor Total</th>
-                <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Funcionários</th>
-                <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Rateio Unit.</th>
+                <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Envolvidos</th>
                 <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Status</th>
                 <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Ações</th>
               </tr>
@@ -321,7 +357,7 @@ export default function CashierShortage({
               {shortages.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-10 text-center text-slate-400 italic">
-                    Nenhum registro de falta de caixa encontrado.
+                    Nenhum registro encontrado.
                   </td>
                 </tr>
               ) : (
@@ -331,20 +367,30 @@ export default function CashierShortage({
                       <div className="font-bold text-slate-800">{short.data.split("-").reverse().join("/")}</div>
                       <div className="text-[10px] text-slate-500">{short.shiftId.split("_")[1]}</div>
                     </td>
-                    <td className="p-4 font-black text-rose-600">
+                    <td className="p-4">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 w-fit border ${
+                        short.tipo === "Sobra" 
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
+                          : "bg-rose-50 text-rose-700 border-rose-100"
+                      }`}>
+                        {short.tipo === "Sobra" ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+                        {short.tipo}
+                      </span>
+                    </td>
+                    <td className={`p-4 font-black ${short.tipo === "Sobra" ? "text-emerald-600" : "text-rose-600"}`}>
                       R$ {short.valorTotalFalta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="p-4">
-                      <div className="flex flex-wrap gap-1">
-                        {short.funcionariosEnvolvidos.map((f, i) => (
-                          <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px] font-bold">
-                            {f}
-                          </span>
-                        ))}
+                      <div className="flex items-center gap-1">
+                        <Users className="h-3 w-3 text-slate-400" />
+                        <span className="font-bold text-slate-600">{short.funcionariosEnvolvidos.length}</span>
+                        <div className="group relative">
+                          <Info className="h-3 w-3 text-slate-300 cursor-help" />
+                          <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-slate-800 text-white text-[9px] p-2 rounded shadow-xl whitespace-nowrap z-50">
+                            {short.funcionariosEnvolvidos.join(", ")}
+                          </div>
+                        </div>
                       </div>
-                    </td>
-                    <td className="p-4 font-bold text-slate-700">
-                      R$ {short.rateioPorFuncionario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="p-4">
                       <select
@@ -352,7 +398,7 @@ export default function CashierShortage({
                         disabled={isReadOnly}
                         onChange={(e) => handleUpdateStatus(short.id, e.target.value as ShiftShortage["status"])}
                         className={`text-[10px] font-bold px-2 py-1 rounded-lg border outline-none cursor-pointer ${
-                          short.status === "Pago" 
+                          short.status === "Pago" || short.status === "Concluído"
                             ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
                             : short.status === "Pendente"
                             ? "bg-amber-50 text-amber-700 border-amber-100"
@@ -360,8 +406,14 @@ export default function CashierShortage({
                         }`}
                       >
                         <option value="Pendente">Pendente</option>
-                        <option value="Pago">Pago</option>
-                        <option value="Descontado">Descontado</option>
+                        {short.tipo === "Falta" ? (
+                          <>
+                            <option value="Pago">Pago</option>
+                            <option value="Descontado">Descontado</option>
+                          </>
+                        ) : (
+                          <option value="Concluído">Concluído</option>
+                        )}
                       </select>
                     </td>
                     <td className="p-4">
