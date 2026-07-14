@@ -262,6 +262,16 @@ export interface ActivityLog {
   stationCnpj: string;
 }
 
+export interface DashboardPreferences {
+  visibleWidgets: {
+    quickStats: boolean;
+    fuelTanks: boolean;
+    activeShift: boolean;
+    qualityControl: boolean;
+  };
+  dailyGoalLiters: number;
+}
+
 export interface AppState {
   users: User[];
   tanks: FuelTank[];
@@ -280,5 +290,6 @@ export interface AppState {
   shortages: ShiftShortage[];
   lubricantDeliveries: LubricantDelivery[];
   dailyBalances: DailyBalance[];
+  dashboardPreferences?: DashboardPreferences;
 }
 

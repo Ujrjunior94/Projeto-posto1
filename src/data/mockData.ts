@@ -494,5 +494,14 @@ export const INITIAL_STATE: AppState = {
       fechadoPor: "Mariana Costa Santos",
       stationCnpj: "12.345.678/0001-99"
     }
-  ]
+  ],
+  dashboardPreferences: {
+    visibleWidgets: {
+      quickStats: true,
+      fuelTanks: true,
+      activeShift: true,
+      qualityControl: true
+    },
+    dailyGoalLiters: 15000
+  }
 };

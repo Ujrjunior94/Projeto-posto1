@@ -164,6 +164,10 @@ export default function App() {
     setAppState((prev) => ({ ...prev, shortages }));
   };
 
+  const handleUpdatePreferences = (dashboardPreferences: typeof appState.dashboardPreferences) => {
+    setAppState((prev) => ({ ...prev, dashboardPreferences }));
+  };
+
   const handleUpdateLubricants = (lubricantDeliveries: typeof appState.lubricantDeliveries) => {
     setAppState((prev) => ({ ...prev, lubricantDeliveries }));
   };
@@ -439,7 +443,11 @@ export default function App() {
           
           {/* Main Router Logic */}
           {activeTab === "dashboard" && (
-            <DashboardOverview appState={appState} onNavigate={setActiveTab} />
+            <DashboardOverview 
+              appState={appState} 
+              onNavigate={setActiveTab} 
+              onUpdatePreferences={handleUpdatePreferences}
+            />
           )}
 
           {activeTab === "tanques" && (
