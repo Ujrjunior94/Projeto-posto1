@@ -68,18 +68,28 @@ async function startServer() {
         return res.status(400).json({ error: "Imagem e mimeType são obrigatórios." });
       }
 
-      const prompt = `Analise a imagem da escala de trabalho de um posto de combustíveis e extraia as informações de turnos (schedules), eventos (reuniões, treinamentos, manutenções) e a lista única de funcionários citados.
-      Retorne um JSON seguindo exatamente este esquema:
+      const prompt = `Analise a imagem da escala de trabalho de um posto de combustíveis.
+      Sua tarefa é extrair três tipos de informações de forma estruturada:
+      1. Lista única de funcionários (employees): Todos os nomes de pessoas físicas identificados na escala.
+      2. Turnos de trabalho (schedules): Mapeamento de datas para turnos (Manhã, Tarde, Noite, etc.) e o nome do funcionário responsável.
+      3. Eventos (events): Reuniões, manutenções, auditorias ou treinamentos com data, título, tipo e horário.
+
+      Regras de Negócio:
+      - Formato de Data: YYYY-MM-DD. Use o ano corrente (2026) se não especificado.
+      - Formato de Horário: HH:MM.
+      - Nomes: Use o nome completo ou como aparece na imagem, padronizando para Capitalize.
+      - Tipos de Evento Permitidos: Treinamento, Reunião, Manutenção, Auditoria, Outro.
+
+      Retorne APENAS um JSON seguindo exatamente este esquema:
       {
-        "employees": ["Nome 1", "Nome 2"],
+        "employees": ["Nome Completo 1", "Nome Completo 2"],
         "schedules": [
-          { "data": "YYYY-MM-DD", "turno": "Nome do Turno", "frentistaResponsavel": "Nome do Funcionário" }
+          { "data": "YYYY-MM-DD", "turno": "Manhã", "frentistaResponsavel": "Nome do Funcionário" }
         ],
         "events": [
-          { "data": "YYYY-MM-DD", "titulo": "Título do Evento", "tipo": "Treinamento|Reunião|Manutenção|Auditoria|Outro", "descricao": "Descrição curta", "horario": "HH:MM" }
+          { "data": "YYYY-MM-DD", "titulo": "Reunião Geral", "tipo": "Reunião", "horario": "09:00", "descricao": "Pauta da reunião" }
         ]
-      }
-      Se não houver eventos ou turnos, retorne arrays vazios. Certifique-se de que as datas estão no formato YYYY-MM-DD e horários em HH:MM.`;
+      }`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",

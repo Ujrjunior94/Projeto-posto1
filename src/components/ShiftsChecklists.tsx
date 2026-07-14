@@ -226,8 +226,9 @@ export default function ShiftsChecklists({
         }
 
         onUpdateShifts(newShifts);
+        const addedNames = newUsers.slice(users.length).map(u => u.nomeCompleto).join(", ");
         onAddAuditLog("IMPORT", "Escala", `Importação concluída: ${data.employees?.length || 0} funcionários, ${data.schedules?.length || 0} turnos e ${data.events?.length || 0} eventos reconhecidos`, "Regular");
-        alert(`Escala importada com sucesso!\n${usersAdded} novos funcionários adicionados ao cadastro.`);
+        alert(`Escala importada com sucesso!\n\n${usersAdded} novos funcionários adicionados: ${addedNames || "Nenhum novo"}`);
       };
       reader.readAsDataURL(file);
     } catch (err) {
