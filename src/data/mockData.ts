@@ -503,5 +503,38 @@ export const INITIAL_STATE: AppState = {
       qualityControl: true
     },
     dailyGoalLiters: 15000
-  }
+  },
+  supplyRequests: [
+    {
+      id: "req_1",
+      dataHora: "2026-07-14 08:30:00",
+      tipo: "Fardamento",
+      nomePosto: "Posto Central Sol",
+      cnpjPosto: "12.345.678/0001-99",
+      quemSolicita: "Mariana Costa Santos",
+      paraQuemSolicita: "Douglas Ferreira",
+      relacionadoFuncionario: true,
+      funcionarioNome: "Douglas Ferreira",
+      tamanhoFarda: "G",
+      numeracaoBota: "41",
+      itemDescricao: "Camisa Polo Oficial e Calça Refletiva",
+      quantidade: 2,
+      observacoes: "Substituição por desgaste natural.",
+      status: "Pendente"
+    },
+    {
+      id: "req_2",
+      dataHora: "2026-07-13 14:15:00",
+      tipo: "Equipamento de Manutenção",
+      nomePosto: "Posto Central Sol",
+      cnpjPosto: "12.345.678/0001-99",
+      quemSolicita: "Mariana Costa Santos",
+      paraQuemSolicita: "Equipe de Pista",
+      relacionadoFuncionario: false,
+      itemDescricao: "Fita de Demarcação Amarela/Preta 50m e Cones Refletivos",
+      quantidade: 4,
+      observacoes: "Para sinalização de manutenção na pista 3.",
+      status: "Aprovado"
+    }
+  ]
 };

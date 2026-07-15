@@ -20,6 +20,7 @@ import AuditorLog from "./components/AuditorLog";
 import CashierShortage from "./components/CashierShortage";
 import LubricantDeliveries from "./components/LubricantDeliveries";
 import DailyBalance from "./components/DailyBalance";
+import SupplyRequests from "./components/SupplyRequests";
 
 import {
   LayoutDashboard,
@@ -41,6 +42,7 @@ import {
   AlertTriangle,
   Droplets,
   BarChart3,
+  Package,
 } from "lucide-react";
 
 const STORAGE_KEY = "meu_posto_app_state";
@@ -176,6 +178,10 @@ export default function App() {
     setAppState((prev) => ({ ...prev, dailyBalances }));
   };
 
+  const handleUpdateSupplyRequests = (supplyRequests: typeof appState.supplyRequests) => {
+    setAppState((prev) => ({ ...prev, supplyRequests }));
+  };
+
   const handleAddAuditLog = (actionType: string, target: string, details: string, status: string = "Regular") => {
     const newLog = {
       id: "log_" + Date.now() + "_" + Math.floor(Math.random() * 100),
@@ -225,6 +231,7 @@ export default function App() {
     { id: "balanco", name: "Balanço Diário", icon: BarChart3, frentistaAllowed: false },
     { id: "escalas", name: "Escala & Checklists", icon: ClipboardList, frentistaAllowed: true },
     { id: "tanques", name: "Controle de Tanques", icon: Fuel, frentistaAllowed: false },
+    { id: "pedidos", name: "Pedidos de Material", icon: Package, frentistaAllowed: true },
     { id: "lubrificantes", name: "Recebimento de Lubrif.", icon: Droplets, frentistaAllowed: true },
     { id: "faltas", name: "Faltas de Caixa", icon: AlertTriangle, frentistaAllowed: true },
     { id: "bicos", name: "Bicos & Bombas", icon: Activity, frentistaAllowed: false },
@@ -550,6 +557,16 @@ export default function App() {
               onRestoreState={handleRestoreState}
               onUpdateCredentials={handleUpdateCredentials}
               onUpdateUsers={handleUpdateUsers}
+              onAddAuditLog={handleAddAuditLog}
+            />
+          )}
+
+          {activeTab === "pedidos" && (
+            <SupplyRequests
+              appState={appState}
+              userRole={currentUser.cargo}
+              currentUser={currentUser}
+              onUpdateSupplyRequests={handleUpdateSupplyRequests}
               onAddAuditLog={handleAddAuditLog}
             />
           )}

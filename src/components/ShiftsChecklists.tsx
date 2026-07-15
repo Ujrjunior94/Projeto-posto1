@@ -1252,17 +1252,28 @@ export default function ShiftsChecklists({
                         {cellSchedules.map((sh) => {
                           const colors = getShiftColorKey(sh.turno);
                           const hasOcc = sh.occurrences && sh.occurrences.length > 0;
+                          
+                          // Check for conflicts: same employee, same date, different shift ID
+                          const isConflicted = allDayShifts.some(
+                            (s) => s.id !== sh.id && 
+                                   s.frentistaResponsavel === sh.frentistaResponsavel && 
+                                   s.frentistaResponsavel !== "Evento Geral"
+                          );
+
                           return (
                             <div
                               key={sh.id}
-                              title={`${sh.frentistaResponsavel} - ${sh.turno}${hasOcc ? ' (' + sh.occurrences.length + ' ocorrência(s))' : ''}`}
-                              className={`px-1 py-0.2 rounded-md border text-[7.5px] sm:text-[8px] font-extrabold flex items-center justify-between min-w-0 truncate ${colors.bg}`}
+                              title={`${sh.frentistaResponsavel} - ${sh.turno}${hasOcc ? ' (' + sh.occurrences.length + ' ocorrência(s))' : ''}${isConflicted ? ' [CONFLITO: Dupla escala no mesmo dia]' : ''}`}
+                              className={`px-1 py-0.2 rounded-md border text-[7.5px] sm:text-[8px] font-extrabold flex items-center justify-between min-w-0 truncate ${
+                                isConflicted ? "bg-rose-600 text-white border-rose-700 shadow-sm" : colors.bg
+                              }`}
                             >
                               <span className="truncate flex items-center gap-0.5">
-                                {hasOcc && <span className="text-rose-600 font-bold" title="Tem ocorrência registrada!">⚠️</span>}
+                                {isConflicted && <AlertTriangle className="h-2 w-2 text-white animate-pulse" />}
+                                {hasOcc && !isConflicted && <span className="text-rose-600 font-bold" title="Tem ocorrência registrada!">⚠️</span>}
                                 {sh.frentistaResponsavel.split(" ")[0]}
                               </span>
-                              <span className={`text-[7px] px-0.5 rounded leading-none shrink-0 ${colors.badge}`}>
+                              <span className={`text-[7px] px-0.5 rounded leading-none shrink-0 ${isConflicted ? "bg-white/20" : colors.badge}`}>
                                 {colors.label}
                               </span>
                             </div>
@@ -1292,16 +1303,40 @@ export default function ShiftsChecklists({
                   ) : (
                     activeDayShifts.map((sh) => {
                       const colors = getShiftColorKey(sh.turno);
+                      const isConflicted = activeDayShifts.some(
+                        (s) => s.id !== sh.id && 
+                               s.frentistaResponsavel === sh.frentistaResponsavel && 
+                               s.frentistaResponsavel !== "Evento Geral"
+                      );
+
                       return (
                         <div
                           key={sh.id}
-                          className="bg-slate-50 border border-slate-200/60 rounded-xl p-3 flex items-center justify-between shadow-xs"
+                          className={`border rounded-xl p-3 flex items-center justify-between shadow-xs transition-colors ${
+                            isConflicted 
+                              ? "bg-rose-50 border-rose-300 ring-2 ring-rose-200 ring-offset-1" 
+                              : "bg-slate-50 border-slate-200/60"
+                          }`}
                         >
-                          <div>
-                            <p className="text-xs font-extrabold text-slate-800">{sh.frentistaResponsavel}</p>
-                            <span className={`inline-block text-[8px] font-black border rounded px-1.5 py-0.1 mt-1 ${colors.bg}`}>
-                              {sh.turno}
-                            </span>
+                          <div className="flex items-center gap-2.5">
+                            {isConflicted && (
+                              <div className="bg-rose-600 p-1.5 rounded-lg text-white animate-pulse">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                              </div>
+                            )}
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-extrabold text-slate-800">{sh.frentistaResponsavel}</p>
+                                {isConflicted && (
+                                  <span className="text-[8px] font-black text-rose-600 uppercase bg-rose-100 px-1.5 py-0.5 rounded-full">
+                                    Conflito de Escala
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`inline-block text-[8px] font-black border rounded px-1.5 py-0.1 mt-1 ${colors.bg}`}>
+                                {sh.turno}
+                              </span>
+                            </div>
                           </div>
                           <button
                             onClick={() => {
@@ -1988,11 +2023,20 @@ export default function ShiftsChecklists({
                   .filter((s) => !s.dayOfWeek)
                   .map((sh) => {
                     const hasActive = shifts.some((s) => s.status === "Em Andamento");
+                    const isConflicted = shifts.some(
+                      (s) => s.id !== sh.id && 
+                             s.frentistaResponsavel === sh.frentistaResponsavel && 
+                             s.data === sh.data &&
+                             s.frentistaResponsavel !== "Evento Geral"
+                    );
+
                     return (
                       <div
                         key={sh.id}
-                        className={`p-4 rounded-2xl border space-y-3 ${
-                          sh.status === "Em Andamento"
+                        className={`p-4 rounded-2xl border space-y-3 transition-colors ${
+                          isConflicted
+                            ? "border-rose-300 bg-rose-50/20"
+                            : sh.status === "Em Andamento"
                             ? "border-indigo-400 bg-indigo-50/5"
                             : sh.status === "Planejado"
                             ? "border-amber-200 bg-amber-50/10"
@@ -2005,24 +2049,36 @@ export default function ShiftsChecklists({
                               <span className="text-xs font-mono font-bold text-slate-500">
                                 {sh.data.split("-").reverse().join("/")}
                               </span>
-                              <span
-                                className={`text-[9px] font-bold px-1.5 py-0.2 border rounded-full uppercase ${
-                                  sh.status === "Em Andamento"
-                                    ? "bg-indigo-50 border-indigo-200 text-indigo-700 animate-pulse"
-                                    : sh.status === "Planejado"
-                                    ? "bg-amber-50 border-amber-200 text-amber-700"
-                                    : "bg-slate-100 border-slate-200 text-slate-500"
-                                }`}
-                              >
-                                {sh.status}
-                              </span>
+                              <div className="flex gap-1.5">
+                                <span
+                                  className={`text-[9px] font-bold px-1.5 py-0.2 border rounded-full uppercase ${
+                                    sh.status === "Em Andamento"
+                                      ? "bg-indigo-50 border-indigo-200 text-indigo-700 animate-pulse"
+                                      : sh.status === "Planejado"
+                                      ? "bg-amber-50 border-amber-200 text-amber-700"
+                                      : "bg-slate-100 border-slate-200 text-slate-500"
+                                  }`}
+                                >
+                                  {sh.status}
+                                </span>
+                                {isConflicted && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.2 bg-rose-600 text-white border border-rose-700 rounded-full uppercase flex items-center gap-1 animate-pulse">
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    Conflito
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <h4 className="text-sm font-bold text-slate-800 mt-1 flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5 text-slate-400" />
                               {sh.turno}
                             </h4>
                           </div>
-                          <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/50 rounded-lg px-2.5 py-1">
+                          <span className={`text-xs font-semibold rounded-lg px-2.5 py-1 border ${
+                            isConflicted 
+                              ? "bg-rose-100 border-rose-200 text-rose-800 font-bold" 
+                              : "bg-slate-100 border-slate-200/50 text-slate-700"
+                          }`}>
                             Responsável: {sh.frentistaResponsavel}
                           </span>
                         </div>

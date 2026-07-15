@@ -272,6 +272,24 @@ export interface DashboardPreferences {
   dailyGoalLiters: number;
 }
 
+export interface SupplyRequest {
+  id: string;
+  dataHora: string; // YYYY-MM-DD HH:MM:SS
+  tipo: "Fardamento" | "Bota" | "Material de Escritório" | "Equipamento de Manutenção";
+  nomePosto: string;
+  cnpjPosto: string;
+  quemSolicita: string;
+  paraQuemSolicita: string;
+  relacionadoFuncionario: boolean;
+  funcionarioNome?: string;
+  tamanhoFarda?: string;
+  numeracaoBota?: string;
+  itemDescricao: string;
+  quantidade: number;
+  observacoes?: string;
+  status: "Pendente" | "Aprovado" | "Entregue" | "Cancelado";
+}
+
 export interface AppState {
   users: User[];
   tanks: FuelTank[];
@@ -291,5 +309,6 @@ export interface AppState {
   lubricantDeliveries: LubricantDelivery[];
   dailyBalances: DailyBalance[];
   dashboardPreferences?: DashboardPreferences;
+  supplyRequests?: SupplyRequest[];
 }
 
