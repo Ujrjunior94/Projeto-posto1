@@ -290,6 +290,23 @@ export interface SupplyRequest {
   status: "Pendente" | "Aprovado" | "Entregue" | "Cancelado";
 }
 
+export interface TimesheetEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  data: string; // YYYY-MM-DD
+  entrada: string; // HH:MM
+  intervaloInicio?: string; // HH:MM
+  intervaloFim?: string; // HH:MM
+  saida?: string; // HH:MM
+  horasTrabalhadas?: string; // e.g. "08:30"
+  confirmado: boolean; // confirmed by user
+  dataHoraRegistro: string; // YYYY-MM-DD HH:MM:SS
+  assinaturaDigital?: string; // digital sign token
+  status: "Pendente" | "Confirmado" | "Rejeitado";
+  observacoes?: string;
+}
+
 export interface AppState {
   users: User[];
   tanks: FuelTank[];
@@ -310,5 +327,6 @@ export interface AppState {
   dailyBalances: DailyBalance[];
   dashboardPreferences?: DashboardPreferences;
   supplyRequests?: SupplyRequest[];
+  timesheetEntries?: TimesheetEntry[];
 }
 

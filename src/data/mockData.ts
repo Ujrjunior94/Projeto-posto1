@@ -536,5 +536,51 @@ export const INITIAL_STATE: AppState = {
       observacoes: "Para sinalização de manutenção na pista 3.",
       status: "Aprovado"
     }
+  ],
+  timesheetEntries: [
+    {
+      id: "pt_1",
+      userId: "u_2", // Assuming Mariana
+      userName: "Mariana Costa Santos",
+      data: "2026-07-14",
+      entrada: "08:00",
+      intervaloInicio: "12:00",
+      intervaloFim: "13:00",
+      saida: "17:00",
+      horasTrabalhadas: "08:00",
+      confirmado: true,
+      dataHoraRegistro: "2026-07-14 17:05:00",
+      assinaturaDigital: "ASS-MCSC-55412",
+      status: "Confirmado"
+    },
+    {
+      id: "pt_2",
+      userId: "u_1", // Douglas
+      userName: "Douglas Ferreira",
+      data: "2026-07-14",
+      entrada: "06:00",
+      intervaloInicio: "10:00",
+      intervaloFim: "11:00",
+      saida: "14:00",
+      horasTrabalhadas: "07:00",
+      confirmado: true,
+      dataHoraRegistro: "2026-07-14 14:10:00",
+      assinaturaDigital: "ASS-DFER-88219",
+      status: "Confirmado"
+    },
+    {
+      id: "pt_3",
+      userId: "u_3",
+      userName: "Carlos Santos",
+      data: "2026-07-14",
+      entrada: "14:00",
+      intervaloInicio: "18:00",
+      intervaloFim: "19:00",
+      saida: "22:00",
+      horasTrabalhadas: "07:00",
+      confirmado: false,
+      dataHoraRegistro: "2026-07-14 22:05:00",
+      status: "Pendente"
+    }
   ]
 };

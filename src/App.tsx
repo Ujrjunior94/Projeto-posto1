@@ -21,6 +21,7 @@ import CashierShortage from "./components/CashierShortage";
 import LubricantDeliveries from "./components/LubricantDeliveries";
 import DailyBalance from "./components/DailyBalance";
 import SupplyRequests from "./components/SupplyRequests";
+import TimesheetManagement from "./components/TimesheetManagement";
 
 import {
   LayoutDashboard,
@@ -43,6 +44,7 @@ import {
   Droplets,
   BarChart3,
   Package,
+  Fingerprint,
 } from "lucide-react";
 
 const STORAGE_KEY = "meu_posto_app_state";
@@ -182,6 +184,10 @@ export default function App() {
     setAppState((prev) => ({ ...prev, supplyRequests }));
   };
 
+  const handleUpdateTimesheetEntries = (timesheetEntries: typeof appState.timesheetEntries) => {
+    setAppState((prev) => ({ ...prev, timesheetEntries }));
+  };
+
   const handleAddAuditLog = (actionType: string, target: string, details: string, status: string = "Regular") => {
     const newLog = {
       id: "log_" + Date.now() + "_" + Math.floor(Math.random() * 100),
@@ -230,6 +236,7 @@ export default function App() {
     { id: "caixa", name: "Leitura de Bicos", icon: ClipboardList, frentistaAllowed: true },
     { id: "balanco", name: "Balanço Diário", icon: BarChart3, frentistaAllowed: false },
     { id: "escalas", name: "Escala & Checklists", icon: ClipboardList, frentistaAllowed: true },
+    { id: "ponto", name: "Folha de Ponto", icon: Fingerprint, frentistaAllowed: true },
     { id: "tanques", name: "Controle de Tanques", icon: Fuel, frentistaAllowed: false },
     { id: "pedidos", name: "Pedidos de Material", icon: Package, frentistaAllowed: true },
     { id: "lubrificantes", name: "Recebimento de Lubrif.", icon: Droplets, frentistaAllowed: true },
@@ -567,6 +574,16 @@ export default function App() {
               userRole={currentUser.cargo}
               currentUser={currentUser}
               onUpdateSupplyRequests={handleUpdateSupplyRequests}
+              onAddAuditLog={handleAddAuditLog}
+            />
+          )}
+
+          {activeTab === "ponto" && (
+            <TimesheetManagement
+              appState={appState}
+              userRole={currentUser.cargo}
+              currentUser={currentUser}
+              onUpdateTimesheetEntries={handleUpdateTimesheetEntries}
               onAddAuditLog={handleAddAuditLog}
             />
           )}
