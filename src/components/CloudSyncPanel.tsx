@@ -33,6 +33,7 @@ interface CloudSyncPanelProps {
   onUpdateCredentials: (credentials: SystemCredential[]) => void;
   onUpdateUsers: (users: User[]) => void;
   onAddAuditLog: (actionType: string, target: string, details: string, status: string) => void;
+  onUpdateStationDetails: (nomePosto: string, cnpjPosto: string, securePassword?: string) => void;
 }
 
 export default function CloudSyncPanel({
@@ -44,6 +45,7 @@ export default function CloudSyncPanel({
   onUpdateCredentials,
   onUpdateUsers,
   onAddAuditLog,
+  onUpdateStationDetails,
 }: CloudSyncPanelProps) {
   const { systemCredentials = [], users = [] } = appState;
 
@@ -67,6 +69,7 @@ export default function CloudSyncPanel({
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [isCredModalOpen, setIsCredModalOpen] = useState(false);
   const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
+  const [isStationModalOpen, setIsStationModalOpen] = useState(false);
 
   // Bank form values
   const currentUserObj = users.find((u) => u.cnpjPosto === cnpjPosto && u.cargo === "Gerente") || users[0];
@@ -74,6 +77,12 @@ export default function CloudSyncPanel({
   const [bankAgency, setBankAgency] = useState("1234-5");
   const [bankAccount, setBankAccount] = useState("98765-4");
   const [bankPixKey, setBankPixKey] = useState(cnpjPosto);
+
+  // Station Form Values
+  const [newStationName, setNewStationName] = useState(appState.nomePosto || "Meu Posto - Gestão Inteligente");
+  const [newStationCnpj, setNewStationCnpj] = useState(cnpjPosto);
+  const [newStationPassword, setNewStationPassword] = useState(appState.securePassword || "adm001");
+  const [stationShowPassword, setStationShowPassword] = useState(false);
 
   // Credential Form Values
   const [credName, setCredName] = useState("");
@@ -92,7 +101,8 @@ export default function CloudSyncPanel({
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
     setLockError(false);
-    if (lockPassword === "adm001") {
+    const requiredPass = appState.securePassword || "adm001";
+    if (lockPassword === requiredPass) {
       setIsUnlocked(true);
       setLockPassword("");
     } else {
@@ -250,7 +260,7 @@ export default function CloudSyncPanel({
           <div>
             <input
               type="password"
-              placeholder="Digite a senha (padrão: adm001)"
+              placeholder={appState.securePassword ? "Digite a senha administrativa" : "Digite a senha (padrão: adm001)"}
               value={lockPassword}
               onChange={(e) => setLockPassword(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 text-center font-semibold"
@@ -258,7 +268,7 @@ export default function CloudSyncPanel({
             {lockError && (
               <p className="text-[10px] text-rose-600 font-bold mt-1.5 flex items-center justify-center gap-1">
                 <AlertCircle className="h-3 w-3" />
-                Senha administrativa incorreta! Tente adm001.
+                Senha administrativa incorreta! {appState.securePassword ? "Use a nova senha que você alterou." : "Tente adm001."}
               </p>
             )}
           </div>
@@ -492,11 +502,11 @@ export default function CloudSyncPanel({
         </div>
       </div>
 
-      {/* Cloud Sync & Supabase Backup */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Cloud Sync & Supabase Backup & Station Config */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Supabase Panel */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
             <Cloud className="h-4 w-4 text-emerald-600" />
             Sincronização Nuvem Supabase ☁️
           </h3>
@@ -504,9 +514,9 @@ export default function CloudSyncPanel({
             Configure credenciais ou endpoints para o sincronizador automático cloud para permitir backup instantâneo de transações, checklists e LMC do posto.
           </p>
 
-          <form onSubmit={handleSaveSyncConfig} className="space-y-4 pt-2">
+          <form onSubmit={handleSaveSyncConfig} className="space-y-4 pt-1">
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">
                 URL da API do Servidor (Backup Host)
               </label>
               <input
@@ -517,7 +527,7 @@ export default function CloudSyncPanel({
               />
             </div>
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">
                 Token de Autorização API (Supabase / Anon Key)
               </label>
               <input
@@ -528,27 +538,27 @@ export default function CloudSyncPanel({
               />
             </div>
 
-            <div className="flex justify-between items-center border-t border-slate-100 pt-3 flex-wrap gap-3">
+            <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
               <button
                 type="submit"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer text-center"
               >
                 Salvar Parâmetros
               </button>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={handleUploadCloud}
-                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+                  className="py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer text-center"
                 >
                   Enviar Nuvem
                 </button>
                 <button
                   type="button"
                   onClick={handleDownloadCloud}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
+                  className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer text-center"
                 >
-                  Sincronizar Dados
+                  Sincronizar
                 </button>
               </div>
             </div>
@@ -558,7 +568,7 @@ export default function CloudSyncPanel({
         {/* Local offline backup card */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
               <Database className="h-4 w-4 text-indigo-600" />
               Backup Local (Offline JSON)
             </h3>
@@ -572,10 +582,64 @@ export default function CloudSyncPanel({
 
           <button
             onClick={handleBackupDownload}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition mt-6 text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition mt-6 text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer border-0"
           >
             <Download className="h-4 w-4" />
             <span>Baixar Backup Completo (.json)</span>
+          </button>
+        </div>
+
+        {/* Configuração de Unidade (Posto, CNPJ e Senha Segura) */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
+              <Building className="h-4 w-4 text-indigo-600" />
+              Dados do Posto & Segurança
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Edite as informações cadastrais básicas do posto (Ex: Nome Fantasia, CNPJ de atuação) e altere a senha de proteção para a Área Segura Administrativa.
+            </p>
+
+            <div className="space-y-3 font-medium text-xs">
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Nome Fantasia do Posto</p>
+                <p className="text-slate-800 font-bold truncate">{appState.nomePosto || "Meu Posto - Gestão Inteligente"}</p>
+              </div>
+
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">CNPJ Cadastrado</p>
+                <p className="text-slate-800 font-bold font-mono">{cnpjPosto}</p>
+              </div>
+
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Senha da Área Segura</p>
+                <div className="flex justify-between items-center">
+                  <p className="text-slate-800 font-mono font-bold">
+                    {stationShowPassword ? (appState.securePassword || "adm001") : "••••••••"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setStationShowPassword(!stationShowPassword)}
+                    className="text-slate-400 hover:text-indigo-600 font-bold text-[10px] uppercase font-sans tracking-wide border-0 cursor-pointer"
+                  >
+                    {stationShowPassword ? "Ocultar" : "Mostrar"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              setNewStationName(appState.nomePosto || "Meu Posto - Gestão Inteligente");
+              setNewStationCnpj(cnpjPosto);
+              setNewStationPassword(appState.securePassword || "adm001");
+              setIsStationModalOpen(true);
+            }}
+            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 rounded-xl transition mt-4 text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer border-0"
+          >
+            <Edit className="h-4 w-4 text-indigo-600" />
+            <span>Editar Posto & Senha</span>
           </button>
         </div>
       </div>
@@ -813,6 +877,102 @@ export default function CloudSyncPanel({
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl cursor-pointer"
                 >
                   Conceder Acesso
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Station / Password Modal */}
+      {isStationModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-sm w-full p-6 shadow-2xl relative animate-in fade-in duration-100">
+            <h3 className="text-sm font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-1.5">
+              <Building className="h-4 w-4 text-indigo-600" />
+              Editar Cadastro do Posto & Senha Segura
+            </h3>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newStationName.trim()) {
+                  alert("Por favor, preencha o Nome do Posto.");
+                  return;
+                }
+                if (!newStationCnpj.trim()) {
+                  alert("Por favor, preencha o CNPJ do Posto.");
+                  return;
+                }
+                if (!newStationPassword.trim()) {
+                  alert("A senha de proteção da Área Segura não pode ser vazia.");
+                  return;
+                }
+                onUpdateStationDetails(newStationName, newStationCnpj, newStationPassword);
+                onAddAuditLog(
+                  "UPDATE",
+                  "Configuração",
+                  `Alterou o Nome para "${newStationName}", CNPJ para "${newStationCnpj}" e a senha da área segura.`,
+                  "Regular"
+                );
+                setIsStationModalOpen(false);
+                setSyncStatus({ type: "success", message: "Cadastro do posto e senha administrativa salvos com sucesso!" });
+                setTimeout(() => setSyncStatus({ type: null, message: "" }), 4000);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nome Fantasia do Posto</label>
+                <input
+                  type="text"
+                  required
+                  value={newStationName}
+                  onChange={(e) => setNewStationName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold text-slate-800"
+                  placeholder="Ex: Posto Central Ltda"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">CNPJ do Posto</label>
+                <input
+                  type="text"
+                  required
+                  value={newStationCnpj}
+                  onChange={(e) => setNewStationCnpj(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-semibold"
+                  placeholder="Ex: 12.345.678/0001-99"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nova Senha da Área Segura</label>
+                <input
+                  type="text"
+                  required
+                  value={newStationPassword}
+                  onChange={(e) => setNewStationPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-semibold text-slate-800"
+                  placeholder="Digite a nova senha administrativa"
+                />
+                <p className="text-[9px] text-slate-400 mt-1">
+                  Esta senha será solicitada para acessar esta aba no próximo desbloqueio.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsStationModalOpen(false)}
+                  className="px-4 py-2 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl cursor-pointer border-0"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl cursor-pointer border-0"
+                >
+                  Salvar Alterações
                 </button>
               </div>
             </form>

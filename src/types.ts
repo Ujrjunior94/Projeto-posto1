@@ -328,5 +328,7 @@ export interface AppState {
   dashboardPreferences?: DashboardPreferences;
   supplyRequests?: SupplyRequest[];
   timesheetEntries?: TimesheetEntry[];
+  nomePosto?: string;
+  securePassword?: string;
 }
 

@@ -582,5 +582,7 @@ export const INITIAL_STATE: AppState = {
       dataHoraRegistro: "2026-07-14 22:05:00",
       status: "Pendente"
     }
-  ]
+  ],
+  nomePosto: "Meu Posto - Gestão Inteligente",
+  securePassword: "adm001"
 };

@@ -188,6 +188,49 @@ export default function App() {
     setAppState((prev) => ({ ...prev, timesheetEntries }));
   };
 
+  const handleUpdateStationDetails = (nomePosto: string, cnpjPosto: string, securePassword?: string) => {
+    setAppState((prev) => {
+      const oldCnpj = currentUser?.cnpjPosto || "12.345.678/0001-99";
+      
+      const updatedUsers = prev.users.map((u) => {
+        if (u.cnpjPosto === oldCnpj) {
+          return { ...u, cnpjPosto };
+        }
+        return u;
+      });
+
+      if (currentUser && currentUser.cnpjPosto === oldCnpj) {
+        const updatedCurrentUser = { ...currentUser, cnpjPosto };
+        setCurrentUser(updatedCurrentUser);
+        localStorage.setItem("meu_posto_logged_user", JSON.stringify(updatedCurrentUser));
+      }
+
+      const updatedShifts = prev.shifts.map(s => s.stationCnpj === oldCnpj ? { ...s, stationCnpj: cnpjPosto } : s);
+      const updatedLmc = prev.lmc.map(r => r.stationCnpj === oldCnpj ? { ...r, stationCnpj: cnpjPosto } : r);
+      const updatedAppointments = prev.appointments.map(a => a.stationCnpj === oldCnpj ? { ...a, stationCnpj: cnpjPosto } : a);
+      const updatedCredentials = prev.systemCredentials.map(c => c.stationCnpj === oldCnpj ? { ...c, stationCnpj: cnpjPosto } : c);
+      const updatedDeliveries = prev.deliveries.map(d => d.stationCnpj === oldCnpj ? { ...d, stationCnpj: cnpjPosto } : d);
+      const updatedAudits = prev.audits.map(a => a.stationCnpj === oldCnpj ? { ...a, stationCnpj: cnpjPosto } : a);
+      const updatedLubricants = prev.lubricantDeliveries.map(d => d.stationCnpj === oldCnpj ? { ...d, stationCnpj: cnpjPosto } : d);
+      const updatedBalances = prev.dailyBalances.map(b => b.stationCnpj === oldCnpj ? { ...b, stationCnpj: cnpjPosto } : b);
+
+      return {
+        ...prev,
+        nomePosto,
+        securePassword: securePassword || prev.securePassword || "adm001",
+        users: updatedUsers,
+        shifts: updatedShifts,
+        lmc: updatedLmc,
+        appointments: updatedAppointments,
+        systemCredentials: updatedCredentials,
+        deliveries: updatedDeliveries,
+        audits: updatedAudits,
+        lubricantDeliveries: updatedLubricants,
+        dailyBalances: updatedBalances
+      };
+    });
+  };
+
   const handleAddAuditLog = (actionType: string, target: string, details: string, status: string = "Regular") => {
     const newLog = {
       id: "log_" + Date.now() + "_" + Math.floor(Math.random() * 100),
@@ -261,7 +304,9 @@ export default function App() {
               <Building2 className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="font-bold text-white tracking-tight text-lg font-display">Meu Posto</h1>
+              <h1 className="font-bold text-white tracking-tight text-lg font-display truncate max-w-[150px]" title={appState.nomePosto || "Meu Posto"}>
+                {appState.nomePosto || "Meu Posto"}
+              </h1>
               <span className="text-[10px] text-indigo-400 font-mono uppercase tracking-widest font-semibold">
                 ERP Sincronizado
               </span>
@@ -353,7 +398,9 @@ export default function App() {
               <div className="flex items-center justify-between pb-4 border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-5 w-5 text-indigo-400" />
-                  <span className="font-bold text-white font-display">Meu Posto</span>
+                  <span className="font-bold text-white font-display truncate max-w-[130px]" title={appState.nomePosto || "Meu Posto"}>
+                    {appState.nomePosto || "Meu Posto"}
+                  </span>
                 </div>
                 <button onClick={() => setSidebarOpen(false)} className="text-slate-400 hover:text-white">
                   <X className="h-5 w-5" />
@@ -565,6 +612,7 @@ export default function App() {
               onUpdateCredentials={handleUpdateCredentials}
               onUpdateUsers={handleUpdateUsers}
               onAddAuditLog={handleAddAuditLog}
+              onUpdateStationDetails={handleUpdateStationDetails}
             />
           )}
 
