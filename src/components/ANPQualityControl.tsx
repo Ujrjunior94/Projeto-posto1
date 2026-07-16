@@ -189,7 +189,7 @@ export default function ANPQualityControl({
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
 
-  // ANP deviation rules: acceptable standard deviation is +-60ml in 20L.
+  // ANP deviation rules: acceptable standard deviation is -100 to +100 mL.
   const handleCreateCalibration = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -206,7 +206,7 @@ export default function ANPQualityControl({
       return;
     }
 
-    const conforme = dev >= -60 && dev <= 60;
+    const conforme = dev >= -100 && dev <= 100;
     
     const nozzle = nozzles.find(n => n.id === calNozzleId);
     const precoPorLitro = nozzle ? nozzle.precoPorLitro : 0;
@@ -224,12 +224,12 @@ export default function ANPQualityControl({
     };
 
     onUpdateCalibrations([...calibrations, newCal]);
-    onAddAuditLog("CREATE", "Qualidade", `Registrou aferição física de 20L para o bico ${calNozzleId}. Desvio: ${dev} ml`, "Regular");
+    onAddAuditLog("CREATE", "Qualidade", `Registrou aferição física de ${calVolumeMedido}L para o bico ${calNozzleId}. Desvio: ${dev} ml`, "Regular");
 
     setSuccess(
       conforme
-        ? `Aferição de bico salva: Conforme padrão INMETRO (desvio: ${dev} ml).`
-        : `ALERTA: Aferição salva! O bico está FORA dos limites técnicos de +-60ml (desvio: ${dev} ml).`
+        ? `Aferição de bico salva: Conforme padrão ANP (desvio: ${dev} ml).`
+        : `ALERTA: Aferição salva! O bico está FORA dos limites técnicos de -100 a +100 mL (desvio: ${dev} ml).`
     );
     setTimeout(() => setSuccess(""), 4000);
   };
@@ -511,10 +511,10 @@ export default function ANPQualityControl({
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-1.5">
               <Gauge className="h-4 w-4 text-indigo-600" />
-              Lançar Aferição Física (20L)
+              Lançar Aferição Física
             </h3>
             <p className="text-[11px] text-slate-500 leading-normal">
-              A cada turno, é obrigatório extrair 20 litros exatos do bico no galão aferidor certificado do INMETRO. O desvio máximo aceito por lei é de <strong>+-60ml</strong> (ou -0.3% a +0.3%).
+              Extraia o volume padrão do bico no galão aferidor certificado. O desvio máximo aceito pela ANP é de <strong>-100 a +100 mL</strong> (ou -0.5% a +0.5% sobre o volume medido).
             </p>
 
             <form onSubmit={handleCreateCalibration} className="space-y-4 pt-2">
@@ -540,12 +540,17 @@ export default function ANPQualityControl({
 
               <div className="grid grid-cols-2 gap-3 pb-2 border-b border-slate-100">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Vol. Galão (L)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Vol. Galão (L) *</label>
                   <input
                     type="number"
-                    disabled
-                    value={20.0}
-                    className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-400 font-semibold"
+                    step="0.1"
+                    min="1"
+                    max="1000"
+                    required
+                    value={calVolumeMedido}
+                    onChange={(e) => setCalVolumeMedido(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold text-slate-800"
+                    placeholder="Ex: 20"
                   />
                 </div>
                 <div>
@@ -572,7 +577,7 @@ export default function ANPQualityControl({
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase">
                   <span>Ajustar Desvio (mL)</span>
-                  <span className={`text-xs font-mono font-black ${calDesvioMl >= -60 && calDesvioMl <= 60 ? "text-emerald-600" : "text-rose-600 animate-pulse"}`}>
+                  <span className={`text-xs font-mono font-black ${calDesvioMl >= -100 && calDesvioMl <= 100 ? "text-emerald-600" : "text-rose-600 animate-pulse"}`}>
                     {calDesvioMl > 0 ? `+${calDesvioMl}` : calDesvioMl} mL
                   </span>
                 </div>
@@ -587,9 +592,9 @@ export default function ANPQualityControl({
                 />
                 <div className="flex justify-between text-[8px] text-slate-400 font-mono font-semibold">
                   <span>-120 mL</span>
-                  <span className="text-emerald-600">-60 mL</span>
+                  <span className="text-emerald-600">-100 mL</span>
                   <span>0 mL</span>
-                  <span className="text-emerald-600">+60 mL</span>
+                  <span className="text-emerald-600">+100 mL</span>
                   <span>+120 mL</span>
                 </div>
               </div>
@@ -597,7 +602,7 @@ export default function ANPQualityControl({
               <div className="space-y-1">
                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Atalhos de Calibração</label>
                 <div className="grid grid-cols-5 gap-1">
-                  {[-120, -60, 0, 60, 120].map((val) => (
+                  {[-120, -100, 0, 100, 120].map((val) => (
                     <button
                       key={val}
                       type="button"
@@ -631,12 +636,12 @@ export default function ANPQualityControl({
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Veredicto Rápido</p>
                 <span
                   className={`inline-block px-2.5 py-0.5 rounded-full font-black text-[9px] uppercase ${
-                    calDesvioMl >= -60 && calDesvioMl <= 60
+                    calDesvioMl >= -100 && calDesvioMl <= 100
                       ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                       : "bg-rose-50 text-rose-700 border border-rose-100 animate-pulse"
                   }`}
                 >
-                  {calDesvioMl >= -60 && calDesvioMl <= 60 ? "DENTRO DOS LIMITES (+-60ml)" : "FORA DE CALIBRAÇÃO!"}
+                  {calDesvioMl >= -100 && calDesvioMl <= 100 ? "DENTRO DOS LIMITES (-100 a +100ml)" : "FORA DE CALIBRAÇÃO!"}
                 </span>
               </div>
 

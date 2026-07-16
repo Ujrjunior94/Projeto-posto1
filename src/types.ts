@@ -132,9 +132,9 @@ export interface NozzleCalibration {
   id: string;
   data: string; // YYYY-MM-DD
   nozzleId: string;
-  volumeMedido: number; // should be close to 20L
-  desvioMl: number; // allowed deviation is +-60ml (records from -100 to +100ml)
-  conforme: boolean; // desvioMl between -60 and +60
+  volumeMedido: number; // should be close to the selected gallon volume (e.g. 20L)
+  desvioMl: number; // allowed deviation is from -100 to +100 mL
+  conforme: boolean; // desvioMl between -100 and +100 mL
   operadorResponsavel: string;
   valorReais?: number; // valor da aferição em R$ (precoPorLitro * volumeMedido)
 }
