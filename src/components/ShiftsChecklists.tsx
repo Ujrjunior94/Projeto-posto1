@@ -123,6 +123,11 @@ export default function ShiftsChecklists({
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // PDF Export States
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"visual" | "detailed" | "combined">("combined");
+  const [exportFilterBySelectedEmployee, setExportFilterBySelectedEmployee] = useState(false);
+
   const handleImportFromPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -723,104 +728,258 @@ export default function ShiftsChecklists({
       const doc = new jsPDF("l", "mm", "a4");
       const emissionDate = new Date().toLocaleString("pt-BR");
 
-      doc.setFillColor(37, 99, 235);
-      doc.rect(0, 0, 297, 25, "F");
+      // Filtered schedules for PDF
+      let pdfSchedules = shifts.filter((s) => s.stationCnpj === cnpjPosto);
+      let subtitleFilters = "";
 
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(15);
-      doc.text("POSTO DE COMBUSTÍVEIS - ERP", 15, 10);
-      
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text(`CNPJ: ${cnpjPosto}`, 15, 15);
-      doc.text(`Planner de Escalas do Mês de ${activeMonth.name}`, 15, 20);
+      if (exportFilterBySelectedEmployee) {
+        if (filterEmployeeId !== "all") {
+          const emp = users.find(u => u.id === filterEmployeeId);
+          if (emp) {
+            pdfSchedules = pdfSchedules.filter(s => s.frentistaResponsavel === emp.nomeCompleto);
+            subtitleFilters += `Frentista: ${emp.nomeCompleto} | `;
+          }
+        }
 
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      doc.text("PLANNER OPERACIONAL DE TURNOS", 282, 12, { align: "right" });
-      doc.setFontSize(8.5);
-      doc.text(`Emissão: ${emissionDate}`, 282, 18, { align: "right" });
-
-      // Weekday table cells calculation
-      const startX = 15;
-      const usableW = 267;
-      const colWidth = usableW / 7;
-      const gridY = 38;
-
-      // Draw weekday headers
-      doc.setFillColor(243, 244, 246);
-      doc.rect(startX, 32, usableW, 6, "F");
-      doc.setDrawColor(209, 213, 219);
-      doc.setLineWidth(0.2);
-      doc.rect(startX, 32, usableW, 6, "D");
-
-      const weekdayLabels = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-      weekdayLabels.forEach((label, idx) => {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
-        doc.setTextColor(55, 65, 81);
-        doc.text(label, startX + idx * colWidth + colWidth / 2, 36.2, { align: "center" });
-      });
-
-      // Calendar drawing inside landscape PDF
-      const totalSlots = activeMonth.offset + activeMonth.days;
-      const rowsCount = Math.ceil(totalSlots / 7);
-      const rowHeight = 140 / rowsCount;
-
-      for (let i = 0; i < rowsCount * 7; i++) {
-        const col = i % 7;
-        const row = Math.floor(i / 7);
-        const cellLeft = startX + col * colWidth;
-        const cellTop = gridY + row * rowHeight;
-
-        if (i >= activeMonth.offset && i < activeMonth.offset + activeMonth.days) {
-          const dayNum = i - activeMonth.offset + 1;
-          const dStr = "Dia " + String(dayNum).padStart(2, "0");
-          const daySchedules = shifts.filter((s) => s.dayOfWeek === dStr && s.stationCnpj === cnpjPosto);
-
-          doc.setFillColor(255, 255, 255);
-          doc.rect(cellLeft, cellTop, colWidth, rowHeight, "F");
-          doc.setDrawColor(209, 213, 219);
-          doc.rect(cellLeft, cellTop, colWidth, rowHeight, "D");
-
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(8.5);
-          doc.setTextColor(31, 41, 55);
-          doc.text(String(dayNum), cellLeft + colWidth - 2.5, cellTop + 4.2, { align: "right" });
-
-          // Render first 3 schedules in cell
-          daySchedules.slice(0, 3).forEach((sh, sIdx) => {
-            const blockX = cellLeft + 1.5;
-            const blockY = cellTop + 5 + sIdx * 5;
-            const blockW = colWidth - 3;
-            const blockH = 4.2;
-
-            if (blockY + blockH < cellTop + rowHeight - 1) {
-              const colors = getShiftColorKey(sh.turno);
-              doc.setFillColor(243, 244, 246); // default bg
-              doc.rect(blockX, blockY, blockW, blockH, "F");
-              doc.setFont("helvetica", "normal");
-              doc.setFontSize(6.5);
-              doc.setTextColor(31, 41, 55);
-              doc.text(`${sh.frentistaResponsavel.split(" ")[0]} (${colors.label})`, blockX + 1, blockY + 3.2);
-            }
+        if (filterShiftPeriod !== "all") {
+          pdfSchedules = pdfSchedules.filter((s) => {
+            const lower = s.turno.toLowerCase();
+            if (filterShiftPeriod === "manha" && lower.includes("manhã")) return true;
+            if (filterShiftPeriod === "tarde" && lower.includes("tarde")) return true;
+            if (filterShiftPeriod === "noite" && lower.includes("noite")) return true;
+            if (filterShiftPeriod === "horista" && lower.includes("horista")) return true;
+            if (filterShiftPeriod === "folga" && (lower.includes("folga") || lower.includes("repouso"))) return true;
+            return false;
           });
-        } else {
-          doc.setFillColor(248, 250, 252);
-          doc.rect(cellLeft, cellTop, colWidth, rowHeight, "F");
-          doc.setDrawColor(226, 232, 240);
-          doc.rect(cellLeft, cellTop, colWidth, rowHeight, "D");
+          const shiftLabel = filterShiftPeriod === "manha" ? "Manhã" : filterShiftPeriod === "tarde" ? "Tarde" : filterShiftPeriod === "noite" ? "Noite" : filterShiftPeriod === "horista" ? "Horistas" : "Folgas";
+          subtitleFilters += `Turno: ${shiftLabel} | `;
+        }
+
+        if (!showRestDays) {
+          pdfSchedules = pdfSchedules.filter((s) => !s.turno.toLowerCase().includes("folga"));
+          subtitleFilters += "Ocultar Folgas | ";
         }
       }
 
-      doc.setFontSize(7.5);
-      doc.setTextColor(156, 163, 175);
-      doc.text("Meu Posto ERP - Gestão Operacional", startX, 195);
-      doc.text("Página 1 de 1", 282, 195, { align: "right" });
+      const activePostoName = (appState.nomePosto || "POSTO DE COMBUSTÍVEIS - ERP").toUpperCase();
+
+      // PAGE 1: VISUAL CALENDAR
+      if (exportFormat === "visual" || exportFormat === "combined") {
+        doc.setFillColor(79, 70, 229); // Beautiful Indigo banner
+        doc.rect(0, 0, 297, 25, "F");
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(15);
+        doc.text(activePostoName, 15, 10);
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(`CNPJ: ${cnpjPosto}`, 15, 15);
+        
+        const filterText = subtitleFilters ? ` (${subtitleFilters.slice(0, -3)})` : "";
+        doc.text(`Planner de Escalas do Mês de ${activeMonth.name}${filterText}`, 15, 20);
+
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("PLANNER OPERACIONAL DE TURNOS", 282, 12, { align: "right" });
+        doc.setFontSize(8.5);
+        doc.text(`Emissão: ${emissionDate}`, 282, 18, { align: "right" });
+
+        // Weekday table cells calculation
+        const startX = 15;
+        const usableW = 267;
+        const colWidth = usableW / 7;
+        const gridY = 38;
+
+        // Draw weekday headers
+        doc.setFillColor(243, 244, 246);
+        doc.rect(startX, 32, usableW, 6, "F");
+        doc.setDrawColor(209, 213, 219);
+        doc.setLineWidth(0.2);
+        doc.rect(startX, 32, usableW, 6, "D");
+
+        const weekdayLabels = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+        weekdayLabels.forEach((label, idx) => {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8);
+          doc.setTextColor(55, 65, 81);
+          doc.text(label, startX + idx * colWidth + colWidth / 2, 36.2, { align: "center" });
+        });
+
+        // Calendar drawing inside landscape PDF
+        const totalSlots = activeMonth.offset + activeMonth.days;
+        const rowsCount = Math.ceil(totalSlots / 7);
+        const rowHeight = 140 / rowsCount;
+
+        for (let i = 0; i < rowsCount * 7; i++) {
+          const col = i % 7;
+          const row = Math.floor(i / 7);
+          const cellLeft = startX + col * colWidth;
+          const cellTop = gridY + row * rowHeight;
+
+          if (i >= activeMonth.offset && i < activeMonth.offset + activeMonth.days) {
+            const dayNum = i - activeMonth.offset + 1;
+            const dStr = "Dia " + String(dayNum).padStart(2, "0");
+            
+            // Filter schedules for this specific day using the filtered PDF schedules
+            const daySchedules = pdfSchedules.filter((s) => s.dayOfWeek === dStr);
+
+            doc.setFillColor(255, 255, 255);
+            doc.rect(cellLeft, cellTop, colWidth, rowHeight, "F");
+            doc.setDrawColor(209, 213, 219);
+            doc.rect(cellLeft, cellTop, colWidth, rowHeight, "D");
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(8.5);
+            doc.setTextColor(31, 41, 55);
+            doc.text(String(dayNum), cellLeft + colWidth - 2.5, cellTop + 4.2, { align: "right" });
+
+            // Render first 3 schedules in cell
+            daySchedules.slice(0, 3).forEach((sh, sIdx) => {
+              const blockX = cellLeft + 1.5;
+              const blockY = cellTop + 5 + sIdx * 5;
+              const blockW = colWidth - 3;
+              const blockH = 4.2;
+
+              if (blockY + blockH < cellTop + rowHeight - 1) {
+                const colors = getShiftColorKey(sh.turno);
+                doc.setFillColor(243, 244, 246); // default bg
+                doc.rect(blockX, blockY, blockW, blockH, "F");
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(6.5);
+                doc.setTextColor(31, 41, 55);
+                doc.text(`${sh.frentistaResponsavel.split(" ")[0]} (${colors.label})`, blockX + 1, blockY + 3.2);
+              }
+            });
+          } else {
+            doc.setFillColor(248, 250, 252);
+            doc.rect(cellLeft, cellTop, colWidth, rowHeight, "F");
+            doc.setDrawColor(226, 232, 240);
+            doc.rect(cellLeft, cellTop, colWidth, rowHeight, "D");
+          }
+        }
+
+        doc.setFontSize(7.5);
+        doc.setTextColor(156, 163, 175);
+        doc.text("Meu Posto ERP - Gestão Operacional", startX, 195);
+        doc.text(`Página 1 de ${exportFormat === "combined" ? "2" : "1"}`, 282, 195, { align: "right" });
+      }
+
+      // PAGE 2 or SINGLE PAGE: DETAILED LIST
+      if (exportFormat === "detailed" || exportFormat === "combined") {
+        if (exportFormat === "combined") {
+          doc.addPage();
+        }
+
+        // Draw header for detailed list
+        doc.setFillColor(79, 70, 229); // Indigo theme banner
+        doc.rect(0, 0, 297, 25, "F");
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(15);
+        doc.text(activePostoName, 15, 10);
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(`CNPJ: ${cnpjPosto}`, 15, 15);
+        
+        const filterText = subtitleFilters ? ` (${subtitleFilters.slice(0, -3)})` : "";
+        doc.text(`Lista Detalhada de Turnos - Mês de ${activeMonth.name}${filterText}`, 15, 20);
+
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("LISTA DE ESCALAS OPERACIONAIS", 282, 12, { align: "right" });
+        doc.setFontSize(8.5);
+        doc.text(`Emissão: ${emissionDate}`, 282, 18, { align: "right" });
+
+        // Table layout
+        let currentY = 35;
+        doc.setFillColor(243, 244, 246);
+        doc.rect(15, currentY, 267, 8, "F");
+        doc.setDrawColor(209, 213, 219);
+        doc.rect(15, currentY, 267, 8, "D");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(55, 65, 81);
+        doc.text("Dia / Data", 20, currentY + 5.5);
+        doc.text("Frentista / Funcionário", 70, currentY + 5.5);
+        doc.text("Cargo", 150, currentY + 5.5);
+        doc.text("Turno de Trabalho", 200, currentY + 5.5);
+        doc.text("Status", 250, currentY + 5.5);
+
+        currentY += 8;
+
+        // Sort schedules by Day number
+        const sortedSchedules = [...pdfSchedules]
+          .filter(s => s.frentistaResponsavel !== "Evento Geral")
+          .sort((a, b) => {
+            const numA = parseInt((a.dayOfWeek || "0").replace("Dia ", "")) || 0;
+            const numB = parseInt((b.dayOfWeek || "0").replace("Dia ", "")) || 0;
+            return numA - numB;
+          });
+
+        if (sortedSchedules.length === 0) {
+          doc.setFont("helvetica", "italic");
+          doc.setFontSize(10);
+          doc.setTextColor(107, 114, 128);
+          doc.text("Nenhum turno agendado ou filtrado para este mês.", 15, currentY + 10);
+        } else {
+          sortedSchedules.forEach((sh, idx) => {
+            if (currentY > 180) {
+              doc.addPage();
+              
+              doc.setFillColor(79, 70, 229);
+              doc.rect(0, 0, 297, 15, "F");
+              doc.setTextColor(255, 255, 255);
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(10);
+              doc.text(`Escala de Turnos - ${activeMonth.name} (Continuação)`, 15, 9);
+              currentY = 25;
+            }
+
+            // Alternating rows bg
+            if (idx % 2 === 1) {
+              doc.setFillColor(249, 250, 251);
+              doc.rect(15, currentY, 267, 7, "F");
+            }
+            doc.setDrawColor(243, 244, 246);
+            doc.line(15, currentY + 7, 282, currentY + 7);
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8.5);
+            doc.setTextColor(31, 41, 55);
+
+            const dNum = sh.dayOfWeek || "Dia --";
+            doc.text(dNum, 20, currentY + 4.8);
+
+            doc.text(sh.frentistaResponsavel, 70, currentY + 4.8);
+
+            const matchedUser = users.find(u => u.nomeCompleto === sh.frentistaResponsavel);
+            const cargo = matchedUser?.cargo || "Frentista";
+            doc.text(cargo, 150, currentY + 4.8);
+
+            doc.setFont("helvetica", "bold");
+            doc.text(sh.turno, 200, currentY + 4.8);
+
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(79, 70, 229);
+            doc.text(sh.status || "Planejado", 250, currentY + 4.8);
+
+            currentY += 7;
+          });
+        }
+
+        doc.setFontSize(7.5);
+        doc.setTextColor(156, 163, 175);
+        doc.text("Meu Posto ERP - Gestão Operacional", 15, 195);
+        doc.text(`Página ${exportFormat === "combined" ? "2" : "1"} de ${exportFormat === "combined" ? "2" : "1"}`, 282, 195, { align: "right" });
+      }
 
       doc.save(`Planner_Escalas_${activeMonth.name.replace(" ", "_")}.pdf`);
-      onAddAuditLog("DOWNLOAD", "Agenda", `Baixou planner mensal PDF de escalas para ${activeMonth.name}`, "Regular");
+      onAddAuditLog("DOWNLOAD", "Agenda", `Baixou planner mensal PDF (${exportFormat}) de escalas para ${activeMonth.name}`, "Regular");
     } catch (e: any) {
       alert("Erro ao exportar Planner: " + e.message);
     }
@@ -896,11 +1055,11 @@ export default function ShiftsChecklists({
 
             <div className="flex items-center gap-2 self-start md:self-auto">
               <button
-                onClick={downloadPlannerPDF}
-                className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl transition text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                onClick={() => setIsExportModalOpen(true)}
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition text-xs flex items-center gap-1.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
               >
-                <Download className="h-3.5 w-3.5 text-rose-500" />
-                Baixar Planner Mensal
+                <Download className="h-3.5 w-3.5" />
+                Exportar Escala (PDF)
               </button>
 
               <div className="flex gap-1">
@@ -2242,6 +2401,116 @@ export default function ShiftsChecklists({
               >
                 Fechar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Export Options Modal */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setIsExportModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            
+            <h3 className="text-sm font-bold text-slate-800 mb-2 pb-2 border-b border-slate-100 flex items-center gap-2">
+              <Download className="text-indigo-600 h-5 w-5" />
+              Exportar Escala em PDF
+            </h3>
+            
+            <p className="text-xs text-slate-500 mb-4">
+              Selecione o formato de exportação ideal para a sua equipe e as configurações desejadas.
+            </p>
+
+            <div className="space-y-4">
+              {/* Format selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Formato do Documento</label>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("visual")}
+                    className={`p-3 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer ${
+                      exportFormat === "visual"
+                        ? "border-indigo-600 bg-indigo-50/20 text-indigo-950"
+                        : "border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700"
+                    }`}
+                  >
+                    <span className="text-xs font-black">🗓️ Calendário Visual (Apenas Calendário)</span>
+                    <span className="text-[10px] text-slate-500 mt-1">Gera uma escala em grade de calendário mensal (A4 Paisagem, 1 página). Ideal para colar no mural da pista.</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("detailed")}
+                    className={`p-3 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer ${
+                      exportFormat === "detailed"
+                        ? "border-indigo-600 bg-indigo-50/20 text-indigo-950"
+                        : "border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700"
+                    }`}
+                  >
+                    <span className="text-xs font-black">📋 Lista Detalhada de Turnos (Apenas Lista)</span>
+                    <span className="text-[10px] text-slate-500 mt-1">Gera uma tabela limpa e detalhada de cada plantão dia-a-dia com frentista, horário e status.</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("combined")}
+                    className={`p-3 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer ${
+                      exportFormat === "combined"
+                        ? "border-indigo-600 bg-indigo-50/20 text-indigo-950"
+                        : "border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700"
+                    }`}
+                  >
+                    <span className="text-xs font-black">📑 Documento Completo (Calendário + Lista)</span>
+                    <span className="text-[10px] text-slate-500 mt-1">Gera um documento de 2 páginas contendo o Calendário Visual na página 1 e a Lista Detalhada na página 2.</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Checkboxes */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filtros da Exportação</p>
+                
+                <label className="flex items-center space-x-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={exportFilterBySelectedEmployee}
+                    onChange={(e) => setExportFilterBySelectedEmployee(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <div className="flex flex-col leading-tight">
+                    <span className="text-xs font-bold text-slate-700">Respeitar Filtros Ativos</span>
+                    <span className="text-[9.5px] text-slate-400">Exporta somente frentistas/turnos visíveis no planner atualmente</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Export Trigger */}
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsExportModalOpen(false)}
+                  className="px-4 py-2 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExportModalOpen(false);
+                    downloadPlannerPDF();
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer shadow-sm flex items-center gap-1.5"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Gerar PDF
+                </button>
+              </div>
             </div>
           </div>
         </div>
