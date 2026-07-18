@@ -30,6 +30,7 @@ import {
   Users as UsersIcon,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 interface ShiftsChecklistsProps {
   appState: AppState;
@@ -67,6 +68,44 @@ export default function ShiftsChecklists({
   onAddAuditLog,
 }: ShiftsChecklistsProps) {
   const { shifts = [], users = [] } = appState;
+
+  const getInitials = (fullName: string) => {
+    if (!fullName) return "";
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const exportPlannerToImage = async () => {
+    try {
+      const element = document.getElementById("planner-calendar-container");
+      if (!element) {
+        alert("Erro: Elemento do calendário não encontrado.");
+        return;
+      }
+      
+      onAddAuditLog("DOWNLOAD", "Agenda", `Iniciou a exportação do planner mensal como imagem PNG`, "Regular");
+
+      const canvas = await html2canvas(element, {
+        scale: 2, // High resolution
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+
+      const image = canvas.toDataURL("image/png");
+      const downloadLink = document.createElement("a");
+      downloadLink.href = image;
+      downloadLink.download = `Planner_Escalas_${activeMonth.name.replace(" ", "_")}.png`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+
+      onAddAuditLog("DOWNLOAD", "Agenda", `Baixou planner mensal em PNG para ${activeMonth.name}`, "Regular");
+    } catch (error: any) {
+      alert("Erro ao exportar imagem: " + error.message);
+    }
+  };
 
   // View tabs inside Scales: "list" (Checklists/Roster) or "planner" (Calendar Planner)
   const [activeTab, setActiveTab] = useState("planner");
@@ -849,7 +888,7 @@ export default function ShiftsChecklists({
                 doc.setFont("helvetica", "normal");
                 doc.setFontSize(6.5);
                 doc.setTextColor(31, 41, 55);
-                doc.text(`${sh.frentistaResponsavel.split(" ")[0]} (${colors.label})`, blockX + 1, blockY + 3.2);
+                doc.text(`${getInitials(sh.frentistaResponsavel)} (${colors.label})`, blockX + 1, blockY + 3.2);
               }
             });
           } else {
@@ -859,6 +898,47 @@ export default function ShiftsChecklists({
             doc.rect(cellLeft, cellTop, colWidth, rowHeight, "D");
           }
         }
+
+        // Draw Legends at the bottom of the visual calendar page (y = 179)
+        const legendY = 179;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(55, 65, 81);
+        doc.text("LEGENDA DOS FRENTISTAS:", startX, legendY);
+
+        const activeUsersOfPosto = users.filter((u) => u.cnpjPosto === cnpjPosto);
+        let userLegendText = "";
+        activeUsersOfPosto.forEach((u) => {
+          const initials = getInitials(u.nomeCompleto);
+          userLegendText += `${initials} → ${u.nomeCompleto.split(" ")[0]} ${u.nomeCompleto.split(" ")[1] || ""}  |  `;
+        });
+        if (userLegendText.endsWith("  |  ")) {
+          userLegendText = userLegendText.slice(0, -5);
+        }
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(107, 114, 128);
+        doc.text(userLegendText, startX + 42, legendY, { maxWidth: 220 });
+
+        // Draw Shift Color Legend (y = 186)
+        const shiftLegendY = 186;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(55, 65, 81);
+        doc.text("CORES DOS TURNOS:", startX, shiftLegendY);
+
+        const shiftsLegendList = [
+          { name: "Manhã", color: "🟢" },
+          { name: "Tarde", color: "🔵" },
+          { name: "Noite", color: "🟠" },
+          { name: "Folga", color: "🔴" },
+          { name: "Férias", color: "⚪" }
+        ];
+        let shiftLegendText = "";
+        shiftsLegendList.forEach((sl) => {
+          shiftLegendText += `${sl.color} ${sl.name}    `;
+        });
+        doc.setFont("helvetica", "normal");
+        doc.text(shiftLegendText, startX + 32, shiftLegendY);
 
         doc.setFontSize(7.5);
         doc.setTextColor(156, 163, 175);
@@ -1059,7 +1139,7 @@ export default function ShiftsChecklists({
                 className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition text-xs flex items-center gap-1.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
               >
                 <Download className="h-3.5 w-3.5" />
-                Exportar Escala (PDF)
+                Exportar Escala
               </button>
 
               <div className="flex gap-1">
@@ -1281,7 +1361,7 @@ export default function ShiftsChecklists({
             </div>
 
             {/* Calendar Grid Container */}
-            <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4" id="planner-calendar-container">
               {/* Day Headers */}
               <div className="grid grid-cols-7 gap-1 bg-slate-50 border border-slate-200/60 rounded-xl p-2 text-center text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
                 {weekdayHeaders.map((day) => (
@@ -1430,7 +1510,7 @@ export default function ShiftsChecklists({
                               <span className="truncate flex items-center gap-0.5">
                                 {isConflicted && <AlertTriangle className="h-2 w-2 text-white animate-pulse" />}
                                 {hasOcc && !isConflicted && <span className="text-rose-600 font-bold" title="Tem ocorrência registrada!">⚠️</span>}
-                                {sh.frentistaResponsavel.split(" ")[0]}
+                                {getInitials(sh.frentistaResponsavel)}
                               </span>
                               <span className={`text-[7px] px-0.5 rounded leading-none shrink-0 ${isConflicted ? "bg-white/20" : colors.badge}`}>
                                 {colors.label}
@@ -1442,6 +1522,62 @@ export default function ShiftsChecklists({
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-slate-100 pt-4 mt-2"></div>
+
+              {/* Automatic Legends Block */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs select-none">
+                {/* Employee Initials Legend */}
+                <div className="bg-slate-50/50 rounded-xl p-3.5 border border-slate-100">
+                  <h5 className="font-extrabold text-[10px] uppercase text-slate-500 tracking-wider mb-2">
+                    👥 Legenda de Frentistas (Iniciais)
+                  </h5>
+                  <div className="grid grid-cols-2 gap-1.5 font-medium text-slate-700 max-h-[120px] overflow-y-auto pr-1">
+                    {users.filter(u => u.cnpjPosto === cnpjPosto).length === 0 ? (
+                      <span className="text-slate-400 italic text-[11px]">Nenhum frentista cadastrado.</span>
+                    ) : (
+                      users.filter(u => u.cnpjPosto === cnpjPosto).map(u => (
+                        <div key={u.id} className="flex items-center gap-1.5 truncate">
+                          <span className="bg-indigo-100 text-indigo-800 text-[9px] font-black px-1.5 py-0.5 rounded shrink-0">
+                            {getInitials(u.nomeCompleto)}
+                          </span>
+                          <span className="truncate text-slate-700">{u.nomeCompleto}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Turn Colors Legend */}
+                <div className="bg-slate-50/50 rounded-xl p-3.5 border border-slate-100">
+                  <h5 className="font-extrabold text-[10px] uppercase text-slate-500 tracking-wider mb-2">
+                    🎨 Legenda de Turnos
+                  </h5>
+                  <div className="grid grid-cols-2 gap-2 text-slate-700">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base leading-none">🟢</span>
+                      <span className="font-medium text-slate-700">Manhã</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base leading-none">🔵</span>
+                      <span className="font-medium text-slate-700">Tarde</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base leading-none">🟠</span>
+                      <span className="font-medium text-slate-700">Noite</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base leading-none">🔴</span>
+                      <span className="font-medium text-slate-700">Folga</span>
+                    </div>
+                    <div className="flex items-center gap-2 col-span-2">
+                      <span className="text-base leading-none">⚪</span>
+                      <span className="font-medium text-slate-700">Férias</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2491,13 +2627,24 @@ export default function ShiftsChecklists({
               </div>
 
               {/* Export Trigger */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setIsExportModalOpen(false)}
                   className="px-4 py-2 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
                 >
                   Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExportModalOpen(false);
+                    exportPlannerToImage();
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer shadow-sm flex items-center gap-1.5"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  Gerar Imagem (PNG)
                 </button>
                 <button
                   type="button"

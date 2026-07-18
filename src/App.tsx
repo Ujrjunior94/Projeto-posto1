@@ -50,6 +50,16 @@ import {
 const STORAGE_KEY = "meu_posto_app_state";
 const CONFIG_KEY = "meu_posto_sync_config";
 
+import { 
+  auth, 
+  db, 
+  onAuthStateChanged, 
+  signOut, 
+  doc, 
+  getDoc, 
+  setDoc 
+} from "./lib/firebase";
+
 export default function App() {
   // 1. Authentication State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -77,11 +87,77 @@ export default function App() {
   // 4. UI Layout States
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loadingState, setLoadingState] = useState(false);
 
-  // Auto-persist AppState to localStorage
+  // Sync Firebase Auth session
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as User;
+            setCurrentUser(userData);
+            localStorage.setItem("meu_posto_logged_user", JSON.stringify(userData));
+          }
+        } catch (err) {
+          console.error("Erro ao carregar sessão do usuário:", err);
+        }
+      } else {
+        setCurrentUser(null);
+        localStorage.removeItem("meu_posto_logged_user");
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync Firestore AppState when currentUser is loaded
+  useEffect(() => {
+    if (!currentUser) return;
+    const cnpj = currentUser.cnpjPosto;
+    const loadFirestoreState = async () => {
+      setLoadingState(true);
+      try {
+        const docRef = doc(db, "postos", cnpj);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const cloudData = docSnap.data() as AppState;
+          setAppState(cloudData);
+        } else {
+          // Store the current local state or INITIAL_STATE as the new doc
+          await setDoc(docRef, appState);
+        }
+      } catch (err) {
+        console.error("Erro ao sincronizar com Firestore:", err);
+      } finally {
+        setLoadingState(false);
+      }
+    };
+    loadFirestoreState();
+  }, [currentUser?.cnpjPosto]);
+
+  // Debounced auto-persist AppState to Firestore and immediate localStorage save
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-  }, [appState]);
+    
+    if (!currentUser) return;
+    const cnpj = currentUser.cnpjPosto;
+    
+    const saveToFirestore = async () => {
+      try {
+        const docRef = doc(db, "postos", cnpj);
+        await setDoc(docRef, appState);
+      } catch (err) {
+        console.error("Erro ao salvar dados no Firestore:", err);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      saveToFirestore();
+    }, 1500); // 1.5 second debounce
+
+    return () => clearTimeout(timer);
+  }, [appState, currentUser?.cnpjPosto]);
 
   // Auto-persist SyncConfig
   useEffect(() => {
@@ -97,7 +173,12 @@ export default function App() {
   };
 
   // Handle Logouts
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error("Erro ao deslogar:", err);
+    }
     setCurrentUser(null);
     localStorage.removeItem("meu_posto_logged_user");
   };
