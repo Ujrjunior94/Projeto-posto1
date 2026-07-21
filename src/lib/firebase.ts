@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import { 
   getFirestore, 
+  enableIndexedDbPersistence,
   doc, 
   setDoc, 
   getDoc, 
@@ -17,7 +18,8 @@ import {
   collection, 
   getDocs,
   query,
-  where
+  where,
+  onSnapshot
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
@@ -27,6 +29,20 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+
+if (typeof window !== "undefined") {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === "failed-precondition") {
+      // Multiple tabs open, persistence can only be enabled in one tab at a time.
+      console.warn("Firestore: Persistência desativada (múltiplas abas abertas)");
+    } else if (err.code === "unimplemented") {
+      // The current browser does not support all of the features required to enable persistence
+      console.warn("Firestore: Navegador não suporta persistência offline completa");
+    } else {
+      console.warn("Firestore: Persistência offline não habilitada:", err?.message || err);
+    }
+  });
+}
 
 export { 
   app, 
@@ -46,6 +62,7 @@ export {
   getDocs,
   query,
   where,
+  onSnapshot,
   ref,
   uploadBytes,
   getDownloadURL,

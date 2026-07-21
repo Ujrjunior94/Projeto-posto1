@@ -105,11 +105,12 @@ export default function AuthScreen({ onLogin, existingUsers, onRegister }: AuthS
       }
     } catch (err: any) {
       console.error(err);
-      let errorMsg = "Erro ao fazer login: " + err.message;
-      if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential" || err.code === "auth/invalid-email") {
+      let errorMsg = "Erro ao fazer login: " + (err.message || "Erro desconhecido");
+      const errString = String(err).toLowerCase();
+      if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential" || err.code === "auth/invalid-email" || errString.includes("invalid-credential") || errString.includes("wrong-password")) {
         errorMsg = "E-mail ou senha incorretos.";
-      } else if (err.code === "auth/user-not-found") {
-        errorMsg = "Usuário não cadastrado.";
+      } else if (err.code === "auth/user-not-found" || errString.includes("user-not-found")) {
+        errorMsg = "Usuário não cadastrado. Por favor, cadastre-se primeiro.";
       }
       setError(errorMsg);
     } finally {

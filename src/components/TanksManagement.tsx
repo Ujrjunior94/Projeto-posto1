@@ -16,6 +16,7 @@ interface TanksManagementProps {
 export const FUEL_TYPES: FuelType[] = [
   "Gasolina Comum",
   "Gasolina Aditivada",
+  "Gasolina Premium",
   "Etanol",
   "Diesel S10",
   "Diesel S500",

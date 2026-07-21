@@ -76,18 +76,27 @@ export function checkFuelCompliance(
     teorMin = 95.1;
     teorMax = 96.0;
     teorOk = teorCalculadoOuEsperado >= teorMin && teorCalculadoOuEsperado <= teorMax;
-  } else if (fuel.includes("Gasolina")) {
+  } else if (fuel === "Gasolina Comum" || fuel === "Gasolina Aditivada") {
     densidadeMin = 0.7150;
     densidadeMax = 0.7750;
-    teorMin = 26.0; // Standard 27% ± 1%
-    teorMax = 28.0;
+    teorMin = 26.0; // ANP 2026: E27/E30 standard range (26% to 30%)
+    teorMax = 30.0;
+    teorCalculadoOuEsperado = teorInformado;
+    teorOk = teorInformado >= teorMin && teorInformado <= teorMax;
+  } else if (fuel === "Gasolina Premium") {
+    densidadeMin = 0.7700;
+    densidadeMax = 0.8000;
+    teorMin = 25.0; // ANP 2026 Premium
+    teorMax = 30.0;
     teorCalculadoOuEsperado = teorInformado;
     teorOk = teorInformado >= teorMin && teorInformado <= teorMax;
   } else if (fuel === "Diesel S10") {
-    densidadeMin = 0.8150;
+    densidadeMin = 0.8200;
     densidadeMax = 0.8500;
-    teorCalculadoOuEsperado = 0;
-    teorOk = true;
+    teorMin = 14.0; // Biodiesel B14/B15 in 2026
+    teorMax = 15.0;
+    teorCalculadoOuEsperado = teorInformado > 0 ? teorInformado : 15.0;
+    teorOk = teorInformado === 0 || (teorInformado >= teorMin && teorInformado <= teorMax);
   } else if (fuel === "Diesel S500") {
     densidadeMin = 0.8200;
     densidadeMax = 0.8650;
@@ -103,19 +112,21 @@ export function checkFuelCompliance(
 
   if (!conforme) {
     const motivos: string[] = [];
-    if (!densidadeOk) motivos.push(`Densidade corrigida a 20°C (${d20.toFixed(4)} g/cm³) fora da faixa (${densidadeMin.toFixed(4)} - ${densidadeMax.toFixed(4)})`);
+    if (!densidadeOk) motivos.push(`Massa específica D20 (${d20.toFixed(4)} g/cm³) fora da faixa ANP 2026 (${densidadeMin.toFixed(4)} - ${densidadeMax.toFixed(4)} g/cm³)`);
     if (!teorOk) {
       if (fuel === "Etanol") {
         motivos.push(`Teor Alcoólico (${teorCalculadoOuEsperado.toFixed(1)}% v/v) fora do permitido (95.1% - 96.0%)`);
-      } else {
-        motivos.push(`Teor de Etanol (${teorCalculadoOuEsperado.toFixed(1)}%) fora do limite legal (26.0% - 28.0%)`);
+      } else if (fuel.includes("Gasolina")) {
+        motivos.push(`Teor de Etanol Anidro (${teorCalculadoOuEsperado.toFixed(1)}%) fora do limite regulamentar (${teorMin.toFixed(1)}% - ${teorMax.toFixed(1)}%)`);
+      } else if (fuel.includes("Diesel")) {
+        motivos.push(`Teor de Biodiesel (${teorCalculadoOuEsperado.toFixed(1)}%) fora do limite B14/B15`);
       }
     }
-    if (!aspectoOk) motivos.push("Aspecto visual não é Límpido e Isento");
-    if (!impurezasOk) motivos.push("Presença de impurezas");
-    mensagem = "Não Conforme: " + motivos.join("; ");
+    if (!aspectoOk) motivos.push("Aspecto visual não atende o critério Límpido e Isento");
+    if (!impurezasOk) motivos.push("Presença detectada de partículas/impurezas");
+    mensagem = "Não Conforme (ANP 2026): " + motivos.join("; ");
   } else {
-    mensagem = "Conforme: Combustível aprovado sob regulamentação ANP 2026.";
+    mensagem = "Conforme: Combustível aprovado em conformidade com as normas ANP 2026.";
   }
 
   return {
@@ -157,8 +168,8 @@ export default function ANPQualityControl({
   const fuelDeliveries = deliveries;
   const isReadOnly = userRole === "Frentista";
 
-  // Active view inside Quality tab: "afericao" (Calibrations), "laudo" (Chemical Quality), "entregas" (Fuel Deliveries)
-  const [activeSubTab, setActiveSubTab] = useState<"afericao" | "laudo" | "entregas">("afericao");
+  // Active view inside Quality tab: "afericao" (Calibrations), "laudo" (Chemical Quality), "entregas" (Fuel Deliveries), "especificacoes_2026" (ANP 2026 Specs Table)
+  const [activeSubTab, setActiveSubTab] = useState<"afericao" | "laudo" | "entregas" | "especificacoes_2026">("afericao");
 
   // Selection state for batch actions
   const [selectedCalibrations, setSelectedCalibrations] = useState<{ [key: string]: boolean }>({});
@@ -486,6 +497,14 @@ export default function ANPQualityControl({
             }`}
           >
             🚚 Entregas NF-e
+          </button>
+          <button
+            onClick={() => setActiveSubTab("especificacoes_2026")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+              activeSubTab === "especificacoes_2026" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            📋 Normas ANP 2026
           </button>
         </div>
       </div>
@@ -1273,6 +1292,222 @@ export default function ANPQualityControl({
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === "especificacoes_2026" && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-800 text-white p-6 rounded-2xl border border-indigo-800/40 shadow-md">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <span className="px-2.5 py-1 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 text-[10px] font-black uppercase tracking-widest rounded-full">
+                  Vigência 2026 - ANP & Lei nº 14.993/2024
+                </span>
+                <h3 className="text-lg font-black mt-2 text-white font-display">
+                  Tabela Oficial de Conformidade e Especificações de Combustíveis
+                </h3>
+                <p className="text-xs text-indigo-200/80 mt-1 max-w-2xl leading-relaxed">
+                  Parâmetros e limites regulamentares estabelecidos pela Agência Nacional do Petróleo, Gás Natural e Biocombustíveis (ANP) para comercialização em postos revendedores em 2026.
+                </p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl border border-white/10 text-center min-w-[160px]">
+                <span className="text-[10px] uppercase font-bold text-indigo-300 block">Tolerância de Vazão (20L)</span>
+                <span className="text-lg font-black text-emerald-400 font-mono">± 100 mL</span>
+                <span className="text-[9px] text-slate-300 block">Portaria Inmetro / ANP</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Specifications Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {/* Gasolina Comum / Aditivada */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
+                  Gasolina Comum / Aditivada
+                </h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
+                  E27 / E30
+                </span>
+              </div>
+              <ul className="text-xs space-y-2 text-slate-600">
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (20°C):</span>
+                  <span className="font-mono font-bold text-slate-800">715,0 a 775,0 kg/m³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (D20 g/cm³):</span>
+                  <span className="font-mono font-bold text-slate-800">0,7150 a 0,7750 g/cm³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Teor de Etanol Anidro:</span>
+                  <span className="font-mono font-bold text-indigo-700">26,0% a 30,0% v/v</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Octanagem Mínima (RON):</span>
+                  <span className="font-mono font-bold text-emerald-700">93,0 RON</span>
+                </li>
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400 font-medium">Teor Máx. de Enxofre:</span>
+                  <span className="font-mono font-bold text-slate-700">50 mg/kg (S50)</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Gasolina Premium */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-indigo-600 inline-block" />
+                  Gasolina Premium / Podium
+                </h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full">
+                  Alta Octanagem
+                </span>
+              </div>
+              <ul className="text-xs space-y-2 text-slate-600">
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (20°C):</span>
+                  <span className="font-mono font-bold text-slate-800">770,0 a 800,0 kg/m³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (D20 g/cm³):</span>
+                  <span className="font-mono font-bold text-slate-800">0,7700 a 0,8000 g/cm³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Teor de Etanol Anidro:</span>
+                  <span className="font-mono font-bold text-indigo-700">25,0% a 30,0% v/v</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Octanagem Mínima (RON):</span>
+                  <span className="font-mono font-bold text-emerald-700">98,0 RON</span>
+                </li>
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400 font-medium">Teor Máx. de Enxofre:</span>
+                  <span className="font-mono font-bold text-slate-700">50 mg/kg (S50)</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Etanol Hidratado */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+                  Etanol Hidratado (Comum / Aditivado)
+                </h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+                  Renovável
+                </span>
+              </div>
+              <ul className="text-xs space-y-2 text-slate-600">
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (20°C):</span>
+                  <span className="font-mono font-bold text-slate-800">807,6 a 811,0 kg/m³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (D20 g/cm³):</span>
+                  <span className="font-mono font-bold text-slate-800">0,8076 a 0,8110 g/cm³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Teor Alcoólico (% em Massa):</span>
+                  <span className="font-mono font-bold text-indigo-700">92,5 a 93,8 °INPM</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Teor Alcoólico (% em Volume):</span>
+                  <span className="font-mono font-bold text-emerald-700">95,1% a 96,0% v/v (°GL)</span>
+                </li>
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400 font-medium">Condutividade Elétrica Máx.:</span>
+                  <span className="font-mono font-bold text-slate-700">500 µS/m</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Diesel S10 (B14 / B15) */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-slate-700 inline-block" />
+                  Óleo Diesel S10 (Comum / Aditivado)
+                </h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full">
+                  B14 / B15 2026
+                </span>
+              </div>
+              <ul className="text-xs space-y-2 text-slate-600">
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (20°C):</span>
+                  <span className="font-mono font-bold text-slate-800">820,0 a 850,0 kg/m³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (D20 g/cm³):</span>
+                  <span className="font-mono font-bold text-slate-800">0,8200 a 0,8500 g/cm³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Adição Obrigatória de Biodiesel:</span>
+                  <span className="font-mono font-bold text-indigo-700">14,0% a 15,0% v/v (B15)</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Ponto de Fulgor Mínimo:</span>
+                  <span className="font-mono font-bold text-emerald-700">38,0 °C</span>
+                </li>
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400 font-medium">Teor Máx. de Enxofre:</span>
+                  <span className="font-mono font-bold text-slate-700">10 mg/kg (S10)</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Diesel S500 */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-slate-500 inline-block" />
+                  Óleo Diesel S500
+                </h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full">
+                  Uso Agro / Veículos Antigos
+                </span>
+              </div>
+              <ul className="text-xs space-y-2 text-slate-600">
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (20°C):</span>
+                  <span className="font-mono font-bold text-slate-800">820,0 a 865,0 kg/m³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Massa Específica (D20 g/cm³):</span>
+                  <span className="font-mono font-bold text-slate-800">0,8200 a 0,8650 g/cm³</span>
+                </li>
+                <li className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400 font-medium">Ponto de Fulgor Mínimo:</span>
+                  <span className="font-mono font-bold text-emerald-700">38,0 °C</span>
+                </li>
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400 font-medium">Teor Máx. de Enxofre:</span>
+                  <span className="font-mono font-bold text-slate-700">500 mg/kg (S500)</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Procedimentos Regulamentares */}
+            <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 shadow-xs space-y-3">
+              <h4 className="text-xs font-black text-indigo-300 uppercase tracking-wide flex items-center gap-2 pb-2 border-b border-slate-800">
+                <Sparkles className="h-4 w-4 text-indigo-400" />
+                Procedimentos de Teste Obrigatórios
+              </h4>
+              <div className="space-y-2 text-[11px] text-slate-300 leading-relaxed">
+                <p>
+                  <strong>1. Teste de Proveta (Etanol na Gasolina):</strong> Em proveta de 100ml graduada de 1ml, misture 50ml de gasolina com 50ml de água salina (10% NaCl). A taxa de decantação após 15 min indica o percentual legal (faixa 26% a 30%).
+                </p>
+                <p>
+                  <strong>2. Termodensímetro a 20°C:</strong> Faça a medição com o densímetro e termômetro calibrados e aplique a tabela de conversão D20 ($D_{20} = D_t + f \cdot (t - 20)$).
+                </p>
+              </div>
             </div>
           </div>
         </div>

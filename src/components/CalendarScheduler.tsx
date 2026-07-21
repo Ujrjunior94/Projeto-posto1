@@ -143,13 +143,13 @@ export default function CalendarScheduler({
 
   // Filters appointments and shifts
   const dayAppointments = appointments.filter(
-    (app) => app.stationCnpj === cnpjPosto && app.date === selectedDate
+    (app) => (!app.stationCnpj || app.stationCnpj === cnpjPosto) && app.date === selectedDate
   );
   
   // Format day name matching Day 01, Day 02 inside shifts
   const formattedDayStr = "Dia " + String(selectedDayNum).padStart(2, "0");
   const dayShifts = shifts.filter(
-    (sh) => sh.stationCnpj === cnpjPosto && sh.dayOfWeek === formattedDayStr && sh.frentistaResponsavel !== "Evento Geral"
+    (sh) => (!sh.stationCnpj || sh.stationCnpj === cnpjPosto) && sh.dayOfWeek === formattedDayStr && sh.frentistaResponsavel !== "Evento Geral"
   );
 
   // Month labels array
@@ -232,10 +232,10 @@ export default function CalendarScheduler({
               const isSelected = selectedDate === cellDate;
 
               const cellApps = appointments.filter(
-                (app) => app.stationCnpj === cnpjPosto && app.date === cellDate
+                (app) => (!app.stationCnpj || app.stationCnpj === cnpjPosto) && app.date === cellDate
               );
               const cellShifts = shifts.filter(
-                (sh) => sh.stationCnpj === cnpjPosto && sh.dayOfWeek === "Dia " + dayStrNum && sh.frentistaResponsavel !== "Evento Geral"
+                (sh) => (!sh.stationCnpj || sh.stationCnpj === cnpjPosto) && sh.dayOfWeek === "Dia " + dayStrNum && sh.frentistaResponsavel !== "Evento Geral"
               );
 
               return (

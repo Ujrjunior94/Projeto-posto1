@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from "react";
 import { AppState, ShiftSchedule, User } from "../types";
+import { UserAvatar, PRESET_AVATAR_ICONS } from "./UserAvatar";
 import {
   ClipboardList,
   Clock,
@@ -28,6 +29,11 @@ import {
   Eye,
   Wrench,
   Users as UsersIcon,
+  Calendar,
+  FileCheck,
+  CheckCircle2,
+  GripVertical,
+  Edit,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -68,6 +74,12 @@ export default function ShiftsChecklists({
   onAddAuditLog,
 }: ShiftsChecklistsProps) {
   const { shifts = [], users = [] } = appState;
+
+  // Master Authority logic for Managers & Masters
+  const isMasterOrGerente = userRole === "Master" || userRole === "Gerente" || userRole === "Supervisor" || userRole === "Gerente Geral" || userRole === "Administrador";
+
+  // State for Editing a full Shift Session
+  const [editingShift, setEditingShift] = useState<ShiftSchedule | null>(null);
 
   const getInitials = (fullName: string) => {
     if (!fullName) return "";
@@ -113,6 +125,21 @@ export default function ShiftsChecklists({
   // Roster Register states
   const [frentistaName, setFrentistaName] = useState("");
   const [frentistaPhone, setFrentistaPhone] = useState("");
+  const [frentistaAvatarIcon, setFrentistaAvatarIcon] = useState("⛽");
+  const [frentistaAvatarUrl, setFrentistaAvatarUrl] = useState("");
+
+  // Avatar edit modal state
+  const [editingAvatarUser, setEditingAvatarUser] = useState<User | null>(null);
+  const [editAvatarIcon, setEditAvatarIcon] = useState("⛽");
+  const [editAvatarUrl, setEditAvatarUrl] = useState("");
+
+  // Contract / Mass Days Assignment Modal states
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
+  const [contractEmpId, setContractEmpId] = useState("");
+  const [contractShift, setContractShift] = useState("Manhã (06h - 14h)");
+  const [contractSelectedDays, setContractSelectedDays] = useState<number[]>([]);
+  const [contractStartDateNum, setContractStartDateNum] = useState<number>(1);
+  const [contractConfirmedCheck, setContractConfirmedCheck] = useState(false);
 
   // Daily checklists state
   const [checklistDate, setChecklistDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -123,6 +150,7 @@ export default function ShiftsChecklists({
   const [monthIndex, setMonthIndex] = useState(0); // Julho de 2026
   const activeMonth = PLANNER_MONTHS[monthIndex];
   const [selectedDayDayStr, setSelectedDayDayStr] = useState("Dia 01");
+  const [dragOverDayStr, setDragOverDayStr] = useState<string | null>(null);
 
   const handlePrevMonth = () => {
     if (monthIndex > 0) {
@@ -161,6 +189,7 @@ export default function ShiftsChecklists({
 
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const cameraInputRef = React.useRef<HTMLInputElement>(null);
 
   // PDF Export States
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -172,115 +201,184 @@ export default function ShiftsChecklists({
     if (!file) return;
 
     setIsImporting(true);
-    onAddAuditLog("IMPORT", "Escala", "Iniciou importação de escala via foto", "Regular");
+    onAddAuditLog("IMPORT", "Escala", "Iniciou importação de escala via foto com IA", "Regular");
 
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        const mimeType = file.type;
+        try {
+          const base64 = (reader.result as string).split(",")[1];
+          const mimeType = file.type;
 
-        const response = await fetch("/api/gemini/import-schedule", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64, mimeType }),
-        });
+          const response = await fetch("/api/gemini/import-schedule", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: base64, mimeType }),
+          });
 
-        if (!response.ok) throw new Error("Erro na API de importação");
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.details || errData.error || "Erro na API de importação com Gemini.");
+          }
 
-        const data = await response.json();
-        
-        // 1. Incorporate recognized employees into the users list
-        const newUsers = [...users];
-        let usersAdded = 0;
+          const data = await response.json();
 
-        if (data.employees && data.employees.length > 0) {
-          data.employees.forEach((empName: string) => {
-            const exists = users.some(u => u.nomeCompleto.toLowerCase() === empName.toLowerCase() && u.cnpjPosto === cnpjPosto);
-            if (!exists && empName.toLowerCase() !== "evento geral") {
+          // 1. Incorporate recognized employees into the users list
+          const newUsers = [...users];
+          let usersAdded = 0;
+
+          const recognizedEmployees = new Set<string>();
+          if (data.employees && Array.isArray(data.employees)) {
+            data.employees.forEach((empName: string) => {
+              if (empName && typeof empName === "string" && empName.trim() && empName.toLowerCase() !== "evento geral") {
+                recognizedEmployees.add(empName.trim());
+              }
+            });
+          }
+
+          if (data.schedules && Array.isArray(data.schedules)) {
+            data.schedules.forEach((s: any) => {
+              if (s.frentistaResponsavel && typeof s.frentistaResponsavel === "string" && s.frentistaResponsavel.trim() && s.frentistaResponsavel.toLowerCase() !== "evento geral") {
+                recognizedEmployees.add(s.frentistaResponsavel.trim());
+              }
+            });
+          }
+
+          recognizedEmployees.forEach((empName: string) => {
+            const exists = newUsers.some((u) => u.nomeCompleto.toLowerCase() === empName.toLowerCase() && (!u.cnpjPosto || u.cnpjPosto === cnpjPosto));
+            if (!exists) {
               const newFrentista: User = {
-                id: "u_ai_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                id: "u_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
                 nomeCompleto: empName,
-                email: empName.toLowerCase().replace(/\s/g, "") + "@posto.com",
+                email: empName.toLowerCase().replace(/\s+/g, "") + "@posto.com",
                 senhaCriptografada: "frentista123",
                 cpf: "000.000.000-00",
                 cargo: "Frentista",
                 cnpjPosto,
-                telefone: "(00) 00000-0000",
+                telefone: "(11) 99999-0000",
+                avatarIcon: "⛽",
               };
               newUsers.push(newFrentista);
               usersAdded++;
             }
           });
-          
+
           if (usersAdded > 0) {
             onUpdateUsers(newUsers);
           }
-        }
 
-        // 2. Merge recognized data into existing shifts
-        const newShifts = [...shifts];
-        
-        // Process schedules
-        if (data.schedules && data.schedules.length > 0) {
-          data.schedules.forEach((s: any) => {
-            const shiftId = "s_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-            newShifts.push({
-              id: shiftId,
-              data: s.data,
-              turno: s.turno,
-              frentistaResponsavel: s.frentistaResponsavel,
-              checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
-              status: "Planejado",
-              stationCnpj: cnpjPosto,
-              dayOfWeek: `Dia ${s.data.split("-")[2]}`
+          // Helper to extract clean "Dia XX" and YYYY-MM-DD
+          const extractDayInfo = (dataStr: string) => {
+            if (!dataStr) return { dayOfWeek: "Dia 01", fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-01` };
+            if (dataStr.startsWith("Dia ")) {
+              const dNum = parseInt(dataStr.replace("Dia ", ""), 10) || 1;
+              const padded = String(dNum).padStart(2, "0");
+              return {
+                dayOfWeek: `Dia ${padded}`,
+                fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${padded}`,
+              };
+            }
+            const digits = dataStr.replace(/\D/g, "");
+            let dNum = 1;
+            if (dataStr.includes("-")) {
+              const parts = dataStr.split("-");
+              dNum = parseInt(parts[parts.length - 1], 10) || 1;
+            } else if (digits) {
+              dNum = parseInt(digits, 10) || 1;
+            }
+            if (dNum < 1 || dNum > 31) dNum = 1;
+            const padded = String(dNum).padStart(2, "0");
+            return {
+              dayOfWeek: `Dia ${padded}`,
+              fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${padded}`,
+            };
+          };
+
+          // 2. Merge recognized data into existing shifts
+          const newShifts = [...shifts];
+          let schedulesAdded = 0;
+          let eventsAdded = 0;
+
+          if (data.schedules && Array.isArray(data.schedules) && data.schedules.length > 0) {
+            data.schedules.forEach((s: any) => {
+              if (!s.frentistaResponsavel) return;
+              const dayInfo = extractDayInfo(s.data);
+              const shiftId = "s_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+
+              let finalTurno = s.turno || "Manhã (06h - 14h)";
+              const lowerT = String(finalTurno).toLowerCase();
+              if (lowerT.includes("manhã") || lowerT === "t2" || lowerT === "m") finalTurno = "Manhã (06h - 14h)";
+              else if (lowerT.includes("tarde") || lowerT === "t3" || lowerT === "t") finalTurno = "Tarde (14h - 22h)";
+              else if (lowerT.includes("noite") || lowerT === "t4" || lowerT === "n") finalTurno = "Noite (22h - 06h)";
+              else if (lowerT.includes("folga") || lowerT.includes("repouso") || lowerT === "f") finalTurno = "Folga Geral";
+              else if (lowerT.includes("horista 2") || lowerT === "h2") finalTurno = "Horista 2 (09h - 18h)";
+              else if (lowerT.includes("horista") || lowerT === "hr") finalTurno = "Horista (10h - 18h)";
+
+              newShifts.push({
+                id: shiftId,
+                data: dayInfo.fullDate,
+                turno: finalTurno as any,
+                frentistaResponsavel: s.frentistaResponsavel,
+                checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+                status: "Planejado",
+                stationCnpj: cnpjPosto,
+                dayOfWeek: dayInfo.dayOfWeek,
+              });
+              schedulesAdded++;
             });
-          });
+          }
+
+          if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+            data.events.forEach((evt: any) => {
+              const dayInfo = extractDayInfo(evt.data);
+              const eventId = "evt_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+              const newEvent = {
+                id: eventId,
+                titulo: evt.titulo || "Evento",
+                tipo: evt.tipo || "Outro",
+                descricao: evt.descricao || "",
+                horario: evt.horario || "09:00",
+              };
+
+              const existingShift = newShifts.find(
+                (s) => (!s.stationCnpj || s.stationCnpj === cnpjPosto) && s.dayOfWeek === dayInfo.dayOfWeek && s.frentistaResponsavel === "Evento Geral"
+              );
+              if (existingShift) {
+                existingShift.events = [...(existingShift.events || []), newEvent];
+              } else {
+                newShifts.push({
+                  id: "s_evt_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+                  data: dayInfo.fullDate,
+                  turno: "Evento Geral",
+                  frentistaResponsavel: "Evento Geral",
+                  checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+                  status: "Planejado",
+                  stationCnpj: cnpjPosto,
+                  dayOfWeek: dayInfo.dayOfWeek,
+                  events: [newEvent],
+                });
+              }
+              eventsAdded++;
+            });
+          }
+
+          onUpdateShifts(newShifts);
+          onAddAuditLog("IMPORT", "Escala", `Importação com IA concluída: ${usersAdded} frentistas, ${schedulesAdded} turnos e ${eventsAdded} eventos`, "Regular");
+          alert(`Escala de plantão importada com sucesso via IA!\n\n• ${usersAdded} novos frentistas adicionados à equipe\n• ${schedulesAdded} plantões alocados no planner\n• ${eventsAdded} eventos/reuniões agendados`);
+        } catch (err: any) {
+          console.error(err);
+          alert(`Erro ao importar escala com IA: ${err.message || "Verifique se a foto é legível."}`);
+        } finally {
+          setIsImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          if (cameraInputRef.current) cameraInputRef.current.value = "";
         }
-
-        // Process events
-        if (data.events && data.events.length > 0) {
-          data.events.forEach((evt: any) => {
-             const eventId = "evt_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-             const newEvent = {
-               id: eventId,
-               titulo: evt.titulo,
-               tipo: evt.tipo,
-               descricao: evt.descricao || "",
-               horario: evt.horario
-             };
-
-             const existingShift = newShifts.find(s => s.data === evt.data);
-             if (existingShift) {
-               existingShift.events = [...(existingShift.events || []), newEvent];
-             } else {
-               newShifts.push({
-                 id: "s_evt_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
-                 data: evt.data,
-                 turno: "Evento Geral",
-                 frentistaResponsavel: "Evento Geral",
-                 checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
-                 status: "Planejado",
-                 stationCnpj: cnpjPosto,
-                 dayOfWeek: `Dia ${evt.data.split("-")[2]}`,
-                 events: [newEvent]
-               });
-             }
-          });
-        }
-
-        onUpdateShifts(newShifts);
-        const addedNames = newUsers.slice(users.length).map(u => u.nomeCompleto).join(", ");
-        onAddAuditLog("IMPORT", "Escala", `Importação concluída: ${data.employees?.length || 0} funcionários, ${data.schedules?.length || 0} turnos e ${data.events?.length || 0} eventos reconhecidos`, "Regular");
-        alert(`Escala importada com sucesso!\n\n${usersAdded} novos funcionários adicionados: ${addedNames || "Nenhum novo"}`);
       };
       reader.readAsDataURL(file);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Erro ao importar escala com IA. Verifique se o arquivo é uma imagem válida.");
-    } finally {
+      alert("Erro ao ler o arquivo de imagem.");
       setIsImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -293,7 +391,7 @@ export default function ShiftsChecklists({
   // Auto-set the selected shift ID for occurrences when the day changes
   useEffect(() => {
     const dayFrentistas = shifts.filter(
-      (s) => s.dayOfWeek === selectedDayDayStr && s.stationCnpj === cnpjPosto && s.frentistaResponsavel !== "Evento Geral"
+      (s) => s.dayOfWeek === selectedDayDayStr && (!s.stationCnpj || s.stationCnpj === cnpjPosto) && s.frentistaResponsavel !== "Evento Geral"
     );
     if (dayFrentistas.length > 0) {
       setOccShiftId(dayFrentistas[0].id);
@@ -389,6 +487,29 @@ export default function ShiftsChecklists({
     }
   };
 
+  const handleSaveEditedShift = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingShift) return;
+
+    const updatedShifts = shifts.map((s) => (s.id === editingShift.id ? editingShift : s));
+    onUpdateShifts(updatedShifts);
+    onAddAuditLog("UPDATE", "Agenda", `Editou sessão/plantão de ${editingShift.frentistaResponsavel}`, "Regular");
+    setEditingShift(null);
+  };
+
+  const handleDeleteShiftSession = (shiftId: string) => {
+    const shiftTarget = shifts.find((s) => s.id === shiftId);
+    const name = shiftTarget ? shiftTarget.frentistaResponsavel : "da sessão";
+    if (confirm(`Tem certeza de que deseja EXCLUIR TODOS OS DADOS do plantão/sessão de ${name}?`)) {
+      const updatedShifts = shifts.filter((s) => s.id !== shiftId);
+      onUpdateShifts(updatedShifts);
+      onAddAuditLog("DELETE", "Agenda", `Excluiu sessão/plantão de ${name}`, "Regular");
+      if (editingShift?.id === shiftId) {
+        setEditingShift(null);
+      }
+    }
+  };
+
   const handleSaveEvent = (e: React.FormEvent) => {
     e.preventDefault();
     if (!evtTitle.trim()) {
@@ -476,7 +597,7 @@ export default function ShiftsChecklists({
     }
   };
 
-  const frentistasList = users.filter((u) => u.cnpjPosto === cnpjPosto && (u.cargo === "Frentista" || u.cargo === "Supervisor"));
+  const frentistasList = users.filter((u) => (!u.cnpjPosto || u.cnpjPosto === cnpjPosto) && (u.cargo === "Frentista" || u.cargo === "Supervisor" || u.cargo === "Gerente" || !u.cargo));
 
   const getShiftColorKey = (shiftName: string) => {
     const lower = (shiftName || "").toLowerCase();
@@ -593,7 +714,7 @@ export default function ShiftsChecklists({
     const finalShiftText = shiftOverride || selectedShiftPeriod;
 
     // Check conflict
-    const existing = shifts.find((s) => s.frentistaResponsavel === emp.nomeCompleto && s.dayOfWeek === dayStr);
+    const existing = shifts.find((s) => s.frentistaResponsavel === emp.nomeCompleto && s.dayOfWeek === dayStr && (!s.stationCnpj || s.stationCnpj === cnpjPosto));
     const conflict = checkShiftConflict(empId, dayStr, finalShiftText, existing?.id);
 
     if (conflict) {
@@ -607,16 +728,18 @@ export default function ShiftsChecklists({
       // update
       const updated = shifts.map((s) => {
         if (s.id === existing.id) {
-          return { ...s, turno: finalShiftText as any };
+          return { ...s, turno: finalShiftText as any, stationCnpj: cnpjPosto };
         }
         return s;
       });
       onUpdateShifts(updated);
+      onAddAuditLog("UPDATE", "Agenda", `Alocação atualizada para ${emp.nomeCompleto}: ${finalShiftText} no ${dayStr}`, "Regular");
     } else {
       // create
+      const dayNumStr = dayStr.replace("Dia ", "");
       const newShift: ShiftSchedule = {
-        id: "s_pl_" + Date.now() + "_" + Math.floor(Math.random() * 100),
-        data: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${dayStr.replace("Dia ", "")}`,
+        id: "s_pl_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+        data: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${dayNumStr}`,
         turno: finalShiftText as any,
         frentistaResponsavel: emp.nomeCompleto,
         checklist: {
@@ -626,10 +749,12 @@ export default function ShiftsChecklists({
           testeGerador: false,
         },
         status: "Planejado",
+        stationCnpj: cnpjPosto,
         dayOfWeek: dayStr, // custom field
       } as any;
 
       onUpdateShifts([...shifts, newShift]);
+      onAddAuditLog("CREATE", "Agenda", `Frentista ${emp.nomeCompleto} alocado para ${finalShiftText} no ${dayStr}`, "Regular");
     }
 
     if (!brushMode) {
@@ -658,12 +783,36 @@ export default function ShiftsChecklists({
       cargo: "Frentista",
       cnpjPosto,
       telefone: frentistaPhone || "(11) 98888-7777",
+      avatarIcon: frentistaAvatarIcon,
+      avatarUrl: frentistaAvatarUrl || undefined,
     };
 
     onUpdateUsers([...users, newFrentista]);
     setFrentistaName("");
     setFrentistaPhone("");
+    setFrentistaAvatarIcon("⛽");
+    setFrentistaAvatarUrl("");
     onAddAuditLog("CREATE", "Equipe", `Novo frentista cadastrado: ${frentistaName}`, "Regular");
+  };
+
+  const handleSaveEditedAvatar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAvatarUser) return;
+
+    const updated = users.map((u) => {
+      if (u.id === editingAvatarUser.id) {
+        return {
+          ...u,
+          avatarIcon: editAvatarIcon,
+          avatarUrl: editAvatarUrl || undefined,
+        };
+      }
+      return u;
+    });
+
+    onUpdateUsers(updated);
+    onAddAuditLog("UPDATE", "Equipe", `Perfil atualizado: foto/ícone de ${editingAvatarUser.nomeCompleto}`, "Regular");
+    setEditingAvatarUser(null);
   };
 
   const handleRemoveFrentista = (id: string) => {
@@ -699,6 +848,7 @@ export default function ShiftsChecklists({
         id: "s_pl_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
         data: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${dayStr.replace("Dia ", "")}`,
         dayOfWeek: dayStr,
+        stationCnpj: cnpjPosto,
       }));
 
       onUpdateShifts([...cleared, ...duplicated]);
@@ -745,6 +895,7 @@ export default function ShiftsChecklists({
             },
             status: "Planejado",
             dayOfWeek: dStr,
+            stationCnpj: cnpjPosto,
           } as any);
         });
       }
@@ -762,13 +913,148 @@ export default function ShiftsChecklists({
     }
   };
 
+  const handleOpenContractModal = () => {
+    if (frentistasList.length === 0) {
+      alert("Nenhum frentista cadastrado no sistema.");
+      return;
+    }
+    setContractEmpId(frentistasList[0]?.id || "");
+    setContractShift("Manhã (06h - 14h)");
+    setContractSelectedDays(Array.from({ length: activeMonth.days }, (_, i) => i + 1)); // Default all days
+    setContractStartDateNum(1);
+    setContractConfirmedCheck(false);
+    setIsContractModalOpen(true);
+  };
+
+  const toggleContractDay = (dayNum: number) => {
+    setContractSelectedDays((prev) => {
+      const exists = prev.includes(dayNum);
+      let updated: number[];
+      if (exists) {
+        updated = prev.filter((d) => d !== dayNum);
+      } else {
+        updated = [...prev, dayNum].sort((a, b) => a - b);
+      }
+      if (updated.length > 0 && !updated.includes(contractStartDateNum)) {
+        setContractStartDateNum(updated[0]);
+      }
+      return updated;
+    });
+  };
+
+  const handleSelectWeekdaysContract = () => {
+    const weekdays: number[] = [];
+    for (let d = 1; d <= activeMonth.days; d++) {
+      const slotIndex = d - 1 + activeMonth.offset;
+      const dayOfWeekIdx = slotIndex % 7; // 0=Dom, 6=Sáb
+      if (dayOfWeekIdx >= 1 && dayOfWeekIdx <= 5) {
+        weekdays.push(d);
+      }
+    }
+    setContractSelectedDays(weekdays);
+    if (weekdays.length > 0) setContractStartDateNum(weekdays[0]);
+  };
+
+  const handleSelectWeekendsContract = () => {
+    const weekends: number[] = [];
+    for (let d = 1; d <= activeMonth.days; d++) {
+      const slotIndex = d - 1 + activeMonth.offset;
+      const dayOfWeekIdx = slotIndex % 7; // 0=Dom, 6=Sáb
+      if (dayOfWeekIdx === 0 || dayOfWeekIdx === 6) {
+        weekends.push(d);
+      }
+    }
+    setContractSelectedDays(weekends);
+    if (weekends.length > 0) setContractStartDateNum(weekends[0]);
+  };
+
+  const handleSelect12x36Contract = (mode: "odd" | "even") => {
+    const daysArr: number[] = [];
+    for (let d = 1; d <= activeMonth.days; d++) {
+      if (mode === "odd" && d % 2 !== 0) daysArr.push(d);
+      if (mode === "even" && d % 2 === 0) daysArr.push(d);
+    }
+    setContractSelectedDays(daysArr);
+    if (daysArr.length > 0) setContractStartDateNum(daysArr[0]);
+  };
+
+  const handleApplyContractAllocation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contractEmpId) {
+      alert("Selecione um funcionário.");
+      return;
+    }
+    const emp = users.find((u) => u.id === contractEmpId);
+    if (!emp) {
+      alert("Funcionário não encontrado.");
+      return;
+    }
+    if (contractSelectedDays.length === 0) {
+      alert("Selecione ao menos um dia de trabalho.");
+      return;
+    }
+    if (!contractConfirmedCheck) {
+      alert("Por favor, marque a opção de confirmação antes de concluir o contrato.");
+      return;
+    }
+
+    const newShifts = [...shifts];
+    let addedCount = 0;
+    let updatedCount = 0;
+
+    contractSelectedDays.forEach((dNum) => {
+      const dayStr = "Dia " + String(dNum).padStart(2, "0");
+      const fullDate = `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${String(dNum).padStart(2, "0")}`;
+
+      const existingIdx = newShifts.findIndex(
+        (s) => s.frentistaResponsavel === emp.nomeCompleto && s.dayOfWeek === dayStr && (!s.stationCnpj || s.stationCnpj === cnpjPosto)
+      );
+
+      if (existingIdx >= 0) {
+        newShifts[existingIdx] = {
+          ...newShifts[existingIdx],
+          turno: contractShift as any,
+          data: fullDate,
+          stationCnpj: cnpjPosto,
+        };
+        updatedCount++;
+      } else {
+        newShifts.push({
+          id: "s_cntr_" + Date.now() + "_" + dNum + "_" + Math.floor(Math.random() * 1000),
+          data: fullDate,
+          turno: contractShift as any,
+          frentistaResponsavel: emp.nomeCompleto,
+          checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+          status: "Planejado",
+          stationCnpj: cnpjPosto,
+          dayOfWeek: dayStr,
+        });
+        addedCount++;
+      }
+    });
+
+    onUpdateShifts(newShifts);
+    const startPadded = String(contractStartDateNum).padStart(2, "0");
+    onAddAuditLog(
+      "CREATE",
+      "Agenda",
+      `Alocação por Contrato aplicada para ${emp.nomeCompleto}: ${contractShift} (${contractSelectedDays.length} dias, início dia ${startPadded})`,
+      "Regular"
+    );
+
+    alert(`✅ Contrato de Escala Confirmado!\n\n• Funcionário: ${emp.nomeCompleto}\n• Turno: ${contractShift}\n• Dias Alocados: ${contractSelectedDays.length} dias\n• Início Oficial: Dia ${startPadded}/${String(activeMonth.monthNum).padStart(2, "0")}/${activeMonth.year}`);
+
+    setIsContractModalOpen(false);
+    setContractConfirmedCheck(false);
+  };
+
   const downloadPlannerPDF = () => {
     try {
       const doc = new jsPDF("l", "mm", "a4");
       const emissionDate = new Date().toLocaleString("pt-BR");
 
       // Filtered schedules for PDF
-      let pdfSchedules = shifts.filter((s) => s.stationCnpj === cnpjPosto);
+      let pdfSchedules = shifts.filter((s) => !s.stationCnpj || s.stationCnpj === cnpjPosto);
       let subtitleFilters = "";
 
       if (exportFilterBySelectedEmployee) {
@@ -1066,7 +1352,7 @@ export default function ShiftsChecklists({
   };
 
   // Helper lists filtered
-  const activeDayShifts = shifts.filter((s) => s.dayOfWeek === selectedDayDayStr && s.stationCnpj === cnpjPosto);
+  const activeDayShifts = shifts.filter((s) => s.dayOfWeek === selectedDayDayStr && (!s.stationCnpj || s.stationCnpj === cnpjPosto));
 
   return (
     <div className="space-y-6">
@@ -1267,9 +1553,7 @@ export default function ShiftsChecklists({
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={`w-8 h-8 rounded-full ${getAvatarBgClass(emp.nomeCompleto)} flex items-center justify-center font-black text-xs shrink-0 shadow-sm`}>
-                            {initials}
-                          </div>
+                          <UserAvatar user={emp} size="sm" />
                           <div className="truncate">
                             <p className="text-xs font-extrabold text-slate-800 truncate leading-tight">{emp.nomeCompleto}</p>
                             <p className="text-[10px] text-slate-500 leading-none mt-0.5">{emp.cargo}</p>
@@ -1330,6 +1614,14 @@ export default function ShiftsChecklists({
                       Limpar
                     </button>
                   </div>
+
+                  <button
+                    onClick={handleOpenContractModal}
+                    className="w-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 text-indigo-800 font-extrabold py-2 px-2 rounded-xl text-[10px] text-center transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs mt-1"
+                  >
+                    <Calendar className="h-3.5 w-3.5 text-indigo-600" />
+                    Atribuir por Contrato / Dias
+                  </button>
                   
                   <input 
                     type="file"
@@ -1338,24 +1630,49 @@ export default function ShiftsChecklists({
                     accept="image/*"
                     onChange={handleImportFromPhoto}
                   />
+                  <input 
+                    type="file"
+                    ref={cameraInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleImportFromPhoto}
+                  />
 
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isImporting}
-                    className={`w-full ${isImporting ? "bg-slate-100 text-slate-400" : "bg-emerald-600 hover:bg-emerald-500 text-white"} font-black py-2.5 px-2 rounded-xl text-[10px] text-center transition flex items-center justify-center gap-2 cursor-pointer shadow-md mt-2`}
-                  >
-                    {isImporting ? (
-                      <>
-                        <RefreshCw className="h-3 w-3 animate-spin" />
-                        Processando com IA...
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="h-4 w-4" />
-                        Importar via Foto (IA)
-                      </>
-                    )}
-                  </button>
+                  <div className="pt-2 border-t border-slate-100 space-y-1.5 mt-2">
+                    <p className="text-[9px] font-black uppercase text-indigo-700 tracking-wider">
+                      📷 Escala Física em Foto (IA)
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => cameraInputRef.current?.click()}
+                        disabled={isImporting}
+                        className={`py-2 px-2 rounded-xl text-[10px] font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-xs ${
+                          isImporting
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                        }`}
+                      >
+                        {isImporting ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                        Tirar Foto
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isImporting}
+                        className={`py-2 px-2 rounded-xl text-[10px] font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-xs ${
+                          isImporting
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-slate-800 hover:bg-slate-700 text-white"
+                        }`}
+                      >
+                        {isImporting ? <RefreshCw className="h-3 w-3 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
+                        Upload
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1383,7 +1700,7 @@ export default function ShiftsChecklists({
                   const dayStr = "Dia " + dStrNum;
                   const isSelected = selectedDayDayStr === dayStr;
 
-                  const allDayShifts = shifts.filter((s) => s.dayOfWeek === dayStr && s.stationCnpj === cnpjPosto);
+                  const allDayShifts = shifts.filter((s) => s.dayOfWeek === dayStr && (!s.stationCnpj || s.stationCnpj === cnpjPosto));
                   const dayOccurrencesCount = allDayShifts.reduce((acc, s) => acc + (s.occurrences?.length || 0), 0);
                   const dayEventsCount = allDayShifts.reduce((acc, s) => acc + (s.events?.length || 0), 0);
 
@@ -1422,22 +1739,55 @@ export default function ShiftsChecklists({
                     bgClass = cellIndex % 7 === 0 ? "bg-rose-50/30" : "bg-amber-50/30";
                   }
 
+                  const isDragOver = dragOverDayStr === dayStr;
+
                   return (
                     <div
                       key={`active-${dayNum}`}
                       onClick={() => handleDayCellClick(dayStr)}
                       onDragOver={(e) => {
                         e.preventDefault();
+                        e.dataTransfer.dropEffect = "copy";
+                        if (dragOverDayStr !== dayStr) {
+                          setDragOverDayStr(dayStr);
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        if (dragOverDayStr === dayStr) {
+                          setDragOverDayStr(null);
+                        }
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
+                        setDragOverDayStr(null);
+
+                        // Try reading JSON data first
+                        const jsonData = e.dataTransfer.getData("application/json");
+                        if (jsonData) {
+                          try {
+                            const parsed = JSON.parse(jsonData);
+                            if (parsed.empId) {
+                              handleAllocateEmployee(parsed.empId, dayStr, parsed.turno);
+                              return;
+                            }
+                          } catch (err) {
+                            // ignore JSON parse error
+                          }
+                        }
+
+                        // Fallback to text/plain (emp.id)
                         const empId = e.dataTransfer.getData("text/plain");
                         if (empId) {
-                           handleAllocateEmployee(empId, dayStr);
+                          handleAllocateEmployee(empId, dayStr);
                         }
                       }}
                       className={`min-h-[75px] sm:h-28 p-1 sm:p-1.5 rounded-xl border flex flex-col justify-start relative group transition cursor-pointer select-none ${
-                        isSelected ? "border-2 border-indigo-600 bg-indigo-50/10" : `border-slate-200 hover:border-indigo-400 ${bgClass}`
+                        isDragOver
+                          ? "border-2 border-dashed border-indigo-600 bg-indigo-100/60 scale-[1.03] shadow-md z-10"
+                          : isSelected
+                          ? "border-2 border-indigo-600 bg-indigo-50/10"
+                          : `border-slate-200 hover:border-indigo-400 ${bgClass}`
                       }`}
                     >
                       {/* Cell Header */}
@@ -1488,36 +1838,61 @@ export default function ShiftsChecklists({
 
                       {/* Cell Shift Badges list */}
                       <div className="flex-1 w-full overflow-y-auto space-y-0.5 pr-0.5">
-                        {cellSchedules.map((sh) => {
-                          const colors = getShiftColorKey(sh.turno);
-                          const hasOcc = sh.occurrences && sh.occurrences.length > 0;
-                          
-                          // Check for conflicts: same employee, same date, different shift ID
-                          const isConflicted = allDayShifts.some(
-                            (s) => s.id !== sh.id && 
-                                   s.frentistaResponsavel === sh.frentistaResponsavel && 
-                                   s.frentistaResponsavel !== "Evento Geral"
-                          );
-
-                          return (
-                            <div
-                              key={sh.id}
-                              title={`${sh.frentistaResponsavel} - ${sh.turno}${hasOcc ? ' (' + sh.occurrences.length + ' ocorrência(s))' : ''}${isConflicted ? ' [CONFLITO: Dupla escala no mesmo dia]' : ''}`}
-                              className={`px-1 py-0.2 rounded-md border text-[7.5px] sm:text-[8px] font-extrabold flex items-center justify-between min-w-0 truncate ${
-                                isConflicted ? "bg-rose-600 text-white border-rose-700 shadow-sm" : colors.bg
-                              }`}
+                        {cellSchedules.length === 0 ? (
+                          <div className="flex items-center justify-center h-full py-1">
+                            <span
+                              title="Nenhum frentista alocado para este dia! Clique para atribuir."
+                              className="text-[7px] sm:text-[7.5px] font-black text-rose-700 bg-rose-50 border border-rose-200/90 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs"
                             >
-                              <span className="truncate flex items-center gap-0.5">
-                                {isConflicted && <AlertTriangle className="h-2 w-2 text-white animate-pulse" />}
-                                {hasOcc && !isConflicted && <span className="text-rose-600 font-bold" title="Tem ocorrência registrada!">⚠️</span>}
-                                {getInitials(sh.frentistaResponsavel)}
-                              </span>
-                              <span className={`text-[7px] px-0.5 rounded leading-none shrink-0 ${isConflicted ? "bg-white/20" : colors.badge}`}>
-                                {colors.label}
-                              </span>
-                            </div>
-                          );
-                        })}
+                              <AlertTriangle className="h-2 w-2 text-rose-600 shrink-0 animate-pulse" />
+                              Sem frentista
+                            </span>
+                          </div>
+                        ) : (
+                          cellSchedules.map((sh) => {
+                            const colors = getShiftColorKey(sh.turno);
+                            const hasOcc = sh.occurrences && sh.occurrences.length > 0;
+                            
+                            // Check for conflicts: same employee, same date, different shift ID
+                            const isConflicted = allDayShifts.some(
+                              (s) => s.id !== sh.id && 
+                                     s.frentistaResponsavel === sh.frentistaResponsavel && 
+                                     s.frentistaResponsavel !== "Evento Geral"
+                            );
+
+                            const empUser = users.find((u) => u.nomeCompleto === sh.frentistaResponsavel);
+
+                            return (
+                              <div
+                                key={sh.id}
+                                draggable={true}
+                                onDragStart={(e) => {
+                                  e.stopPropagation();
+                                  if (empUser?.id) e.dataTransfer.setData("text/plain", empUser.id);
+                                  e.dataTransfer.setData("application/json", JSON.stringify({ empId: empUser?.id, turno: sh.turno }));
+                                  e.dataTransfer.effectAllowed = "copy";
+                                }}
+                                title={`${sh.frentistaResponsavel} - ${sh.turno}${hasOcc ? ' (' + sh.occurrences.length + ' ocorrência(s))' : ''}${isConflicted ? ' [CONFLITO: Dupla escala no mesmo dia]' : ''} • Arraste para mover para outro dia`}
+                                className={`px-1 py-0.5 rounded-md border text-[7.5px] sm:text-[8px] font-extrabold flex items-center justify-between min-w-0 truncate shadow-2xs cursor-grab active:cursor-grabbing hover:scale-102 transition ${
+                                  isConflicted ? "bg-rose-600 text-white border-rose-700 shadow-xs" : colors.bg
+                                }`}
+                              >
+                                <span className="truncate flex items-center gap-1">
+                                  {isConflicted && <AlertTriangle className="h-2 w-2 text-white animate-pulse shrink-0" />}
+                                  {hasOcc && !isConflicted && <span className="text-rose-600 font-bold shrink-0" title="Tem ocorrência registrada!">⚠️</span>}
+                                  <UserAvatar user={empUser} name={sh.frentistaResponsavel} size="xs" className="shrink-0" />
+                                  <span className="truncate font-extrabold flex items-center gap-0.5">
+                                    <span className="text-[8px]">⛽</span>
+                                    <span>{getInitials(sh.frentistaResponsavel)}</span>
+                                  </span>
+                                </span>
+                                <span className={`text-[7px] px-1 py-0.2 rounded leading-none shrink-0 font-black ${isConflicted ? "bg-white/20 text-white" : colors.badge}`}>
+                                  {colors.label}
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
                   );
@@ -1540,10 +1915,8 @@ export default function ShiftsChecklists({
                     ) : (
                       users.filter(u => u.cnpjPosto === cnpjPosto).map(u => (
                         <div key={u.id} className="flex items-center gap-1.5 truncate">
-                          <span className="bg-indigo-100 text-indigo-800 text-[9px] font-black px-1.5 py-0.5 rounded shrink-0">
-                            {getInitials(u.nomeCompleto)}
-                          </span>
-                          <span className="truncate text-slate-700">{u.nomeCompleto}</span>
+                          <UserAvatar user={u} size="xs" />
+                          <span className="truncate text-slate-700 font-medium">{u.nomeCompleto}</span>
                         </div>
                       ))
                     )}
@@ -1557,24 +1930,24 @@ export default function ShiftsChecklists({
                   </h5>
                   <div className="grid grid-cols-2 gap-2 text-slate-700">
                     <div className="flex items-center gap-2">
-                      <span className="text-base leading-none">🟢</span>
-                      <span className="font-medium text-slate-700">Manhã</span>
+                      <span className="bg-sky-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shrink-0">M</span>
+                      <span className="font-medium text-slate-700 text-xs">Manhã (06h - 14h)</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-base leading-none">🔵</span>
-                      <span className="font-medium text-slate-700">Tarde</span>
+                      <span className="bg-amber-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shrink-0">T</span>
+                      <span className="font-medium text-slate-700 text-xs">Tarde (14h - 22h)</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-base leading-none">🟠</span>
-                      <span className="font-medium text-slate-700">Noite</span>
+                      <span className="bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shrink-0">N</span>
+                      <span className="font-medium text-slate-700 text-xs">Noite (22h - 06h)</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-base leading-none">🔴</span>
-                      <span className="font-medium text-slate-700">Folga</span>
+                      <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shrink-0">F</span>
+                      <span className="font-medium text-slate-700 text-xs">Folga Geral</span>
                     </div>
                     <div className="flex items-center gap-2 col-span-2">
-                      <span className="text-base leading-none">⚪</span>
-                      <span className="font-medium text-slate-700">Férias</span>
+                      <span className="bg-fuchsia-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shrink-0">HR</span>
+                      <span className="font-medium text-slate-700 text-xs">Horista / Intermediário</span>
                     </div>
                   </div>
                 </div>
@@ -1587,10 +1960,21 @@ export default function ShiftsChecklists({
             {/* Column 1: Allocations & Assignments */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
               <div>
-                <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5 pb-2 border-b border-slate-100 uppercase tracking-wider">
-                  <Sparkles className="h-4 w-4 text-indigo-500" />
-                  Escala do {selectedDayDayStr}
-                </h4>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                  <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+                    <Sparkles className="h-4 w-4 text-indigo-500" />
+                    Escala do {selectedDayDayStr}
+                  </h4>
+                  {activeDayShifts.length > 0 && isMasterOrGerente && (
+                    <button
+                      onClick={() => handleClearAllDayShifts(selectedDayDayStr)}
+                      className="text-[9.5px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                      title="Excluir todos os plantões deste dia"
+                    >
+                      <Trash2 className="h-3 w-3" /> Limpar Dia
+                    </button>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 gap-2.5 pt-3 max-h-[160px] overflow-y-auto pr-1">
                   {activeDayShifts.length === 0 ? (
@@ -1607,42 +1991,54 @@ export default function ShiftsChecklists({
                       return (
                         <div
                           key={sh.id}
-                          className={`border rounded-xl p-3 flex items-center justify-between shadow-xs transition-colors ${
+                          className={`border rounded-xl p-2.5 flex items-center justify-between shadow-xs transition-colors ${
                             isConflicted 
                               ? "bg-rose-50 border-rose-300 ring-2 ring-rose-200 ring-offset-1" 
                               : "bg-slate-50 border-slate-200/60"
                           }`}
                         >
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-2 min-w-0 pr-1">
                             {isConflicted && (
                               <div className="bg-rose-600 p-1.5 rounded-lg text-white animate-pulse">
                                 <AlertTriangle className="h-3.5 w-3.5" />
                               </div>
                             )}
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-xs font-extrabold text-slate-800">{sh.frentistaResponsavel}</p>
+                            <UserAvatar
+                              user={users.find((u) => u.nomeCompleto === sh.frentistaResponsavel)}
+                              name={sh.frentistaResponsavel}
+                              size="sm"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-xs font-extrabold text-slate-800 truncate">{sh.frentistaResponsavel}</p>
                                 {isConflicted && (
                                   <span className="text-[8px] font-black text-rose-600 uppercase bg-rose-100 px-1.5 py-0.5 rounded-full">
-                                    Conflito de Escala
+                                    Conflito
                                   </span>
                                 )}
                               </div>
-                              <span className={`inline-block text-[8px] font-black border rounded px-1.5 py-0.1 mt-1 ${colors.bg}`}>
+                              <span className={`inline-block text-[8px] font-black border rounded px-1.5 py-0.1 mt-0.5 ${colors.bg}`}>
                                 {sh.turno}
                               </span>
                             </div>
                           </div>
-                          <button
-                            onClick={() => {
-                              const filtered = shifts.filter((s) => s.id !== sh.id);
-                              onUpdateShifts(filtered);
-                              onAddAuditLog("DELETE", "Agenda", `Removeu plantão de ${sh.frentistaResponsavel}`, "Regular");
-                            }}
-                            className="text-[10px] font-extrabold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
-                          >
-                            Apagar
-                          </button>
+                          
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => setEditingShift(sh)}
+                              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+                              title="Editar todos os dados desta sessão"
+                            >
+                              <Edit className="h-3 w-3" /> Editar
+                            </button>
+                            <button
+                              onClick={() => handleDeleteShiftSession(sh.id)}
+                              className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+                              title="Excluir esta sessão"
+                            >
+                              <Trash2 className="h-3 w-3" /> Excluir
+                            </button>
+                          </div>
                         </div>
                       );
                     })
@@ -1675,28 +2071,28 @@ export default function ShiftsChecklists({
                 <div className="flex flex-wrap gap-2 pt-1 max-h-[140px] overflow-y-auto pr-1">
                   {frentistasList.map((emp) => {
                     const isAllocated = activeDayShifts.some((s) => s.frentistaResponsavel === emp.nomeCompleto);
-                    const initials = emp.nomeCompleto
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .substring(0, 2)
-                      .toUpperCase();
 
                     return (
                       <button
                         key={emp.id}
+                        draggable={true}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", emp.id);
+                          e.dataTransfer.setData("application/json", JSON.stringify({ empId: emp.id, turno: selectedShiftPeriod }));
+                          e.dataTransfer.effectAllowed = "copy";
+                        }}
                         onClick={() => handleAllocateEmployee(emp.id, selectedDayDayStr, selectedShiftPeriod)}
-                        className={`px-2 py-1.5 rounded-xl flex items-center gap-2 border transition ${
+                        title="Clique para alocar no dia selecionado ou Arraste para qualquer dia da grade"
+                        className={`px-2 py-1.5 rounded-xl flex items-center gap-1.5 border transition cursor-grab active:cursor-grabbing hover:scale-105 active:scale-95 select-none shadow-2xs ${
                           isAllocated
-                            ? "bg-emerald-50 border-emerald-200 text-emerald-800 font-extrabold"
-                            : "bg-white border-slate-200 hover:border-indigo-400 hover:bg-slate-50/50"
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-800 font-extrabold"
+                            : "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50"
                         }`}
                       >
-                        <div className={`w-5 h-5 rounded-full ${getAvatarBgClass(emp.nomeCompleto)} text-[8.5px] font-black flex items-center justify-center shrink-0`}>
-                          {initials}
-                        </div>
-                        <span className="text-[11px] truncate max-w-[80px]">{emp.nomeCompleto.split(" ")[0]}</span>
-                        {isAllocated && <span className="text-[8px] bg-emerald-600 text-white rounded-full h-3 w-3 flex items-center justify-center">✓</span>}
+                        <GripVertical className="h-3 w-3 text-slate-400 shrink-0" />
+                        <UserAvatar user={emp} size="xs" />
+                        <span className="text-[11px] font-bold truncate max-w-[80px]">⛽ {emp.nomeCompleto.split(" ")[0]}</span>
+                        {isAllocated && <span className="text-[8px] bg-emerald-600 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center font-bold">✓</span>}
                       </button>
                     );
                   })}
@@ -2154,10 +2550,25 @@ export default function ShiftsChecklists({
           {/* Left panel: Cadastrar Frentista & Lançar Checklist */}
           <div className="space-y-6">
             {/* Cadastrar Frentista form */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-              <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider mb-4 pb-2 border-b border-slate-100">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider pb-2 border-b border-slate-100">
                 Novo Frentista / Funcionário
               </h3>
+
+              {/* Avatar Live Preview */}
+              <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <UserAvatar
+                  avatarIcon={frentistaAvatarIcon}
+                  avatarUrl={frentistaAvatarUrl}
+                  name={frentistaName || "Novo Funcionário"}
+                  size="lg"
+                />
+                <div>
+                  <p className="text-xs font-bold text-slate-800">{frentistaName || "Nome do Funcionário"}</p>
+                  <span className="text-[10px] text-slate-400">Prévia do Perfil</span>
+                </div>
+              </div>
+
               <form onSubmit={handleAddFrentista} className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Nome Completo *</label>
@@ -2180,6 +2591,59 @@ export default function ShiftsChecklists({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                   />
                 </div>
+
+                {/* Avatar Icon Preset Picker */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Ícone de Perfil</label>
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 rounded-xl border border-slate-200">
+                    {PRESET_AVATAR_ICONS.map((icon) => (
+                      <button
+                        key={icon}
+                        type="button"
+                        onClick={() => setFrentistaAvatarIcon(icon)}
+                        className={`w-7 h-7 text-xs rounded-lg flex items-center justify-center transition border cursor-pointer ${
+                          frentistaAvatarIcon === icon
+                            ? "bg-indigo-600 text-white border-indigo-700 shadow-sm font-bold scale-110"
+                            : "bg-white hover:bg-slate-100 border-slate-200"
+                        }`}
+                      >
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Photo Upload */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Ou Foto do Funcionário</label>
+                  <div className="space-y-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            setFrentistaAvatarUrl(event.target?.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                    />
+                    {frentistaAvatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setFrentistaAvatarUrl("")}
+                        className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                      >
+                        Remover Foto Carregada
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"
@@ -2281,6 +2745,7 @@ export default function ShiftsChecklists({
                 <table className="w-full text-xs text-left">
                   <thead>
                     <tr className="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100 bg-slate-50/30">
+                      <th className="py-2 px-3">Foto / Ícone</th>
                       <th className="py-2 px-3">Frentista</th>
                       <th className="py-2 px-3">Cargo</th>
                       <th className="py-2 px-3">Telefone</th>
@@ -2290,10 +2755,23 @@ export default function ShiftsChecklists({
                   <tbody>
                     {frentistasList.map((emp) => (
                       <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50/20">
+                        <td className="py-2.5 px-3">
+                          <UserAvatar user={emp} size="sm" />
+                        </td>
                         <td className="py-2.5 px-3 font-semibold text-slate-800">{emp.nomeCompleto}</td>
                         <td className="py-2.5 px-3 text-slate-500">{emp.cargo}</td>
                         <td className="py-2.5 px-3 text-slate-500">{emp.telefone}</td>
-                        <td className="py-2.5 px-3 text-right">
+                        <td className="py-2.5 px-3 text-right space-x-2">
+                          <button
+                            onClick={() => {
+                              setEditingAvatarUser(emp);
+                              setEditAvatarIcon(emp.avatarIcon || "⛽");
+                              setEditAvatarUrl(emp.avatarUrl || "");
+                            }}
+                            className="text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
+                          >
+                            Foto/Ícone
+                          </button>
                           <button
                             onClick={() => handleRemoveFrentista(emp.id)}
                             className="text-rose-600 hover:text-rose-800 font-bold hover:underline cursor-pointer"
@@ -2369,13 +2847,29 @@ export default function ShiftsChecklists({
                               {sh.turno}
                             </h4>
                           </div>
-                          <span className={`text-xs font-semibold rounded-lg px-2.5 py-1 border ${
-                            isConflicted 
-                              ? "bg-rose-100 border-rose-200 text-rose-800 font-bold" 
-                              : "bg-slate-100 border-slate-200/50 text-slate-700"
-                          }`}>
-                            Responsável: {sh.frentistaResponsavel}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-xs font-semibold rounded-lg px-2.5 py-1 border ${
+                              isConflicted 
+                                ? "bg-rose-100 border-rose-200 text-rose-800 font-bold" 
+                                : "bg-slate-100 border-slate-200/50 text-slate-700"
+                            }`}>
+                              Responsável: {sh.frentistaResponsavel}
+                            </span>
+                            <button
+                              onClick={() => setEditingShift(sh)}
+                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                              title="Editar dados desta sessão"
+                            >
+                              <Edit className="h-3.5 w-3.5" /> Editar
+                            </button>
+                            <button
+                              onClick={() => handleDeleteShiftSession(sh.id)}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                              title="Excluir esta sessão"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Excluir
+                            </button>
+                          </div>
                         </div>
 
                         {sh.status === "Planejado" && (
@@ -2659,6 +3153,689 @@ export default function ShiftsChecklists({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT EMPLOYEE AVATAR / PHOTO MODAL */}
+      {editingAvatarUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 border border-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <Camera className="h-4 w-4 text-indigo-600" />
+                Alterar Foto ou Ícone de Perfil
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingAvatarUser(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <UserAvatar
+                name={editingAvatarUser.nomeCompleto}
+                avatarIcon={editAvatarIcon}
+                avatarUrl={editAvatarUrl}
+                size="xl"
+              />
+              <div>
+                <h4 className="text-sm font-bold text-slate-800">{editingAvatarUser.nomeCompleto}</h4>
+                <p className="text-xs text-slate-500">{editingAvatarUser.cargo}</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEditedAvatar} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Selecione um Ícone de Perfil
+                </label>
+                <div className="flex flex-wrap gap-2 p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                  {PRESET_AVATAR_ICONS.map((icon) => (
+                    <button
+                      key={icon}
+                      type="button"
+                      onClick={() => setEditAvatarIcon(icon)}
+                      className={`w-8 h-8 text-sm rounded-xl flex items-center justify-center transition border cursor-pointer ${
+                        editAvatarIcon === icon
+                          ? "bg-indigo-600 text-white border-indigo-700 shadow-sm font-bold scale-110"
+                          : "bg-white hover:bg-slate-100 border-slate-200"
+                      }`}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Ou Envie uma Foto de Rosto (JPG/PNG)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        setEditAvatarUrl(ev.target?.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                />
+                {editAvatarUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setEditAvatarUrl("")}
+                    className="mt-1 text-[10px] font-bold text-rose-600 hover:underline cursor-pointer block"
+                  >
+                    Remover Foto Atual
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingAvatarUser(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"
+                >
+                  Salvar Foto / Ícone
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONTRACT / MASS DAYS ALLOCATION MODAL */}
+      {isContractModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-6 border border-slate-200 my-8">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-indigo-600" />
+                  Atribuição de Escala por Contrato & Dias
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Selecione o funcionário, o turno e os dias de trabalho para gerar a escala em lote.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsContractModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full cursor-pointer transition hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleApplyContractAllocation} className="space-y-6">
+              {/* 1. Select Employee & Shift */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black uppercase text-indigo-700 tracking-wider mb-2">
+                    1. Selecionar Funcionário
+                  </label>
+                  <select
+                    value={contractEmpId}
+                    onChange={(e) => setContractEmpId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    {frentistasList.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.nomeCompleto} ({emp.cargo || "Frentista"})
+                      </option>
+                    ))}
+                  </select>
+                  {contractEmpId && (
+                    <div className="mt-2.5 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center gap-3">
+                      <UserAvatar
+                        user={users.find((u) => u.id === contractEmpId)}
+                        size="md"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-extrabold text-slate-900 truncate">
+                          {users.find((u) => u.id === contractEmpId)?.nomeCompleto}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {users.find((u) => u.id === contractEmpId)?.cargo || "Frentista"} • CNPJ: {cnpjPosto}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black uppercase text-indigo-700 tracking-wider mb-2">
+                    2. Selecionar Horário / Turno
+                  </label>
+                  <select
+                    value={contractShift}
+                    onChange={(e) => setContractShift(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    {SHIFT_TYPES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="mt-2.5 p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between">
+                    <span className="text-[11px] font-extrabold text-slate-700">Visualização do Turno:</span>
+                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${getShiftColorKey(contractShift).bg} text-slate-800`}>
+                      {getShiftColorKey(contractShift).label}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Select Days */}
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <label className="text-xs font-black uppercase text-indigo-700 tracking-wider">
+                    3. Selecionar os Dias do Mês ({activeMonth.name})
+                  </label>
+                  <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+                    {contractSelectedDays.length} / {activeMonth.days} dias selecionados
+                  </span>
+                </div>
+
+                {/* Quick Selection Presets */}
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  <button
+                    type="button"
+                    onClick={handleSelectWeekdaysContract}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-[10px] font-bold rounded-lg transition cursor-pointer border border-slate-200"
+                  >
+                    Segunda a Sexta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSelectWeekendsContract}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-[10px] font-bold rounded-lg transition cursor-pointer border border-slate-200"
+                  >
+                    Finais de Semana
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect12x36Contract("odd")}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-[10px] font-bold rounded-lg transition cursor-pointer border border-slate-200"
+                  >
+                    12x36 (Dias Ímpares)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect12x36Contract("even")}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-[10px] font-bold rounded-lg transition cursor-pointer border border-slate-200"
+                  >
+                    12x36 (Dias Pares)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContractSelectedDays(Array.from({ length: activeMonth.days }, (_, i) => i + 1))}
+                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-lg transition cursor-pointer border border-indigo-200"
+                  >
+                    Todos os Dias
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContractSelectedDays([])}
+                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold rounded-lg transition cursor-pointer border border-rose-200"
+                  >
+                    Limpar
+                  </button>
+                </div>
+
+                {/* Day Selection Grid */}
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                  <div className="grid grid-cols-7 gap-1.5 text-center mb-1.5 text-[10px] font-black text-slate-500 uppercase">
+                    {weekdayHeaders.map((w) => (
+                      <div key={w}>{w}</div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {/* Empty offset cells */}
+                    {Array.from({ length: activeMonth.offset }).map((_, i) => (
+                      <div key={`c-offset-${i}`} className="h-8"></div>
+                    ))}
+
+                    {/* Active days */}
+                    {Array.from({ length: activeMonth.days }).map((_, idx) => {
+                      const dNum = idx + 1;
+                      const isSelected = contractSelectedDays.includes(dNum);
+                      const isFirstDay = contractStartDateNum === dNum;
+
+                      return (
+                        <button
+                          key={`c-day-${dNum}`}
+                          type="button"
+                          onClick={() => toggleContractDay(dNum)}
+                          className={`h-8 text-xs font-extrabold rounded-xl transition flex flex-col items-center justify-center relative cursor-pointer ${
+                            isSelected
+                              ? isFirstDay
+                                ? "bg-amber-500 text-white shadow-sm ring-2 ring-amber-600 scale-105"
+                                : "bg-indigo-600 text-white shadow-sm"
+                              : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200"
+                          }`}
+                        >
+                          <span>{dNum}</span>
+                          {isFirstDay && (
+                            <span className="text-[7px] leading-none uppercase tracking-tighter text-amber-100 font-black">
+                              Início
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Select First Working Day */}
+              {contractSelectedDays.length > 0 && (
+                <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-3.5 space-y-2">
+                  <label className="block text-xs font-black uppercase text-amber-900 tracking-wider">
+                    4. Selecionar o Primeiro Dia de Atividade (Início do Contrato)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={contractStartDateNum}
+                      onChange={(e) => setContractStartDateNum(parseInt(e.target.value, 10))}
+                      className="bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs font-extrabold text-amber-950 outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                    >
+                      {contractSelectedDays
+                        .slice()
+                        .sort((a, b) => a - b)
+                        .map((dNum) => (
+                          <option key={`start-opt-${dNum}`} value={dNum}>
+                            Dia {String(dNum).padStart(2, "0")} de {activeMonth.name}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="text-xs font-bold text-amber-800">
+                      🗓️ Início em: Dia {String(contractStartDateNum).padStart(2, "0")}/{String(activeMonth.monthNum).padStart(2, "0")}/{activeMonth.year}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. VISUAL REPORT & CONTRACT PREVIEW */}
+              {contractEmpId && contractSelectedDays.length > 0 && (
+                <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-5 shadow-xl space-y-4 border border-indigo-800/80">
+                  <div className="flex items-center justify-between border-b border-indigo-800/80 pb-3">
+                    <div className="flex items-center gap-2">
+                      <FileCheck className="h-5 w-5 text-indigo-400" />
+                      <h4 className="text-xs font-black uppercase tracking-wider text-indigo-200">
+                        Relatório Visual do Contrato de Escala
+                      </h4>
+                    </div>
+                    <span className="text-[10px] font-extrabold bg-indigo-500/30 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-400/30">
+                      CONFIRMAÇÃO OPERACIONAL
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-indigo-900/50 p-3 rounded-2xl border border-indigo-700/50 flex items-center gap-3">
+                      <UserAvatar
+                        user={users.find((u) => u.id === contractEmpId)}
+                        size="md"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-indigo-300 font-bold uppercase">Funcionário</p>
+                        <p className="text-xs font-extrabold truncate text-white">
+                          {users.find((u) => u.id === contractEmpId)?.nomeCompleto}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-indigo-900/50 p-3 rounded-2xl border border-indigo-700/50">
+                      <p className="text-[10px] text-indigo-300 font-bold uppercase">Turno & Horário</p>
+                      <p className="text-xs font-extrabold text-amber-300 truncate mt-0.5">
+                        {contractShift}
+                      </p>
+                    </div>
+
+                    <div className="bg-indigo-900/50 p-3 rounded-2xl border border-indigo-700/50">
+                      <p className="text-[10px] text-indigo-300 font-bold uppercase">Regime de Trabalho</p>
+                      <p className="text-xs font-extrabold text-emerald-300 mt-0.5">
+                        {contractSelectedDays.length} Dias Úteis | {activeMonth.days - contractSelectedDays.length} Folgas
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Days pills preview */}
+                  <div>
+                    <p className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider mb-1.5">
+                      Dias com Plantão Alocado:
+                    </p>
+                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1">
+                      {contractSelectedDays
+                        .slice()
+                        .sort((a, b) => a - b)
+                        .map((d) => (
+                          <span
+                            key={`pill-${d}`}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                              d === contractStartDateNum
+                                ? "bg-amber-400 text-amber-950 font-black ring-1 ring-amber-300"
+                                : "bg-indigo-800/80 text-indigo-100 border border-indigo-700/80"
+                            }`}
+                          >
+                            Dia {String(d).padStart(2, "0")}
+                            {d === contractStartDateNum ? " (Início)" : ""}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Confirmation Checkbox */}
+                  <div className="pt-2 border-t border-indigo-800/80">
+                    <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={contractConfirmedCheck}
+                        onChange={(e) => setContractConfirmedCheck(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 rounded border-indigo-400 text-indigo-500 focus:ring-indigo-400 cursor-pointer"
+                      />
+                      <span className="text-xs font-extrabold text-indigo-100 leading-snug">
+                        Tenho certeza de que esses são os dias e o turno que o funcionário deve trabalhar e confirmo os dados deste contrato.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsContractModalOpen(false)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!contractConfirmedCheck || contractSelectedDays.length === 0}
+                  className={`px-6 py-2.5 text-xs font-black rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer ${
+                    contractConfirmedCheck && contractSelectedDays.length > 0
+                      ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  }`}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Confirmar e Aplicar Escala
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT SHIFT SESSION MODAL */}
+      {editingShift && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150 my-8">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-indigo-50 text-indigo-700 rounded-2xl border border-indigo-100">
+                  <Edit className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">
+                    Editar Dados da Sessão / Plantão
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    ID: {editingShift.id} • Permissão Master/Gerente ativa
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingShift(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedShift} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Frentista Responsavel */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Frentista Responsável *
+                  </label>
+                  <select
+                    value={editingShift.frentistaResponsavel}
+                    onChange={(e) =>
+                      setEditingShift({ ...editingShift, frentistaResponsavel: e.target.value })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {frentistasList.map((f) => (
+                      <option key={f.id} value={f.nomeCompleto}>
+                        {f.nomeCompleto} ({f.cargo})
+                      </option>
+                    ))}
+                    {editingShift.frentistaResponsavel === "Evento Geral" && (
+                      <option value="Evento Geral">Evento Geral</option>
+                    )}
+                  </select>
+                </div>
+
+                {/* Turno */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Período de Turno *
+                  </label>
+                  <select
+                    value={editingShift.turno}
+                    onChange={(e) =>
+                      setEditingShift({ ...editingShift, turno: e.target.value })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {SHIFT_TYPES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                    <option value="Evento Geral">Evento Geral</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Status */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Status da Sessão *
+                  </label>
+                  <select
+                    value={editingShift.status}
+                    onChange={(e) =>
+                      setEditingShift({ ...editingShift, status: e.target.value as any })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Planejado">Planejado</option>
+                    <option value="Em Andamento">Em Andamento</option>
+                    <option value="Concluído">Concluído</option>
+                    <option value="Fechado">Fechado</option>
+                  </select>
+                </div>
+
+                {/* Data */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Data de Execução
+                  </label>
+                  <input
+                    type="date"
+                    value={editingShift.data || ""}
+                    onChange={(e) =>
+                      setEditingShift({ ...editingShift, data: e.target.value })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Checklist Items */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                <label className="block text-[10px] font-black text-indigo-700 uppercase tracking-wider">
+                  Checklist Operacional & Segurança
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer bg-white p-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 transition">
+                    <input
+                      type="checkbox"
+                      checked={editingShift.checklist?.limpezaPistas || false}
+                      onChange={(e) =>
+                        setEditingShift({
+                          ...editingShift,
+                          checklist: { ...editingShift.checklist, limpezaPistas: e.target.checked },
+                        })
+                      }
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="font-bold text-slate-700 text-xs">Limpeza das Pistas</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer bg-white p-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 transition">
+                    <input
+                      type="checkbox"
+                      checked={editingShift.checklist?.usoEPIs || false}
+                      onChange={(e) =>
+                        setEditingShift({
+                          ...editingShift,
+                          checklist: { ...editingShift.checklist, usoEPIs: e.target.checked },
+                        })
+                      }
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="font-bold text-slate-700 text-xs">Uso de EPIs</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer bg-white p-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 transition">
+                    <input
+                      type="checkbox"
+                      checked={editingShift.checklist?.afericaoEquipamentosSeguranca || false}
+                      onChange={(e) =>
+                        setEditingShift({
+                          ...editingShift,
+                          checklist: { ...editingShift.checklist, afericaoEquipamentosSeguranca: e.target.checked },
+                        })
+                      }
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="font-bold text-slate-700 text-xs">Extintores & Equipamentos</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer bg-white p-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 transition">
+                    <input
+                      type="checkbox"
+                      checked={editingShift.checklist?.testeGerador || false}
+                      onChange={(e) =>
+                        setEditingShift({
+                          ...editingShift,
+                          checklist: { ...editingShift.checklist, testeGerador: e.target.checked },
+                        })
+                      }
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="font-bold text-slate-700 text-xs">Teste Semanal Gerador</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Observações */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Observações da Sessão
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingShift.observacoes || ""}
+                  onChange={(e) =>
+                    setEditingShift({ ...editingShift, observacoes: e.target.value })
+                  }
+                  placeholder="Apontamentos sobre este turno ou checklist..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                />
+              </div>
+
+              {/* Ocorrências vinculadas */}
+              {editingShift.occurrences && editingShift.occurrences.length > 0 && (
+                <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-3 space-y-2">
+                  <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider block">
+                    Ocorrências da Sessão ({editingShift.occurrences.length})
+                  </span>
+                  <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
+                    {editingShift.occurrences.map((o) => (
+                      <div key={o.id} className="bg-white p-2 rounded-xl border border-rose-200 flex justify-between items-center text-xs">
+                        <div>
+                          <span className="font-bold text-rose-700">{o.tipo}:</span> {o.descricao}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedOccs = (editingShift.occurrences || []).filter((item) => item.id !== o.id);
+                            setEditingShift({ ...editingShift, occurrences: updatedOccs });
+                          }}
+                          className="text-rose-600 hover:text-rose-800 font-bold text-[10px] ml-2 shrink-0 cursor-pointer"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteShiftSession(editingShift.id)}
+                  className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-rose-200"
+                >
+                  <Trash2 className="h-4 w-4" /> Excluir Sessão
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingShift(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-4 w-4" /> Salvar Alterações
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

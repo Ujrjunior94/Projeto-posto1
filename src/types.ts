@@ -14,9 +14,11 @@ export interface User {
   cargo: UserRole;
   cnpjPosto: string;
   telefone: string;
+  avatarUrl?: string;
+  avatarIcon?: string;
 }
 
-export type FuelType = "Gasolina Comum" | "Gasolina Aditivada" | "Etanol" | "Diesel S10" | "Diesel S500";
+export type FuelType = "Gasolina Comum" | "Gasolina Aditivada" | "Gasolina Premium" | "Etanol" | "Diesel S10" | "Diesel S500";
 
 export interface FuelTank {
   id: string;
@@ -158,6 +160,12 @@ export interface SyncConfig {
   apiUrl: string;
   token: string;
   autoSync: boolean;
+  scheduledBackupEnabled?: boolean;
+  backupFrequency?: "daily" | "12h" | "weekly" | "shift_end";
+  backupDestination?: "download" | "cloud" | "both";
+  lastBackupDate?: string;
+  lastCloudSyncDate?: string;
+  autoDownloadLocalJson?: boolean;
 }
 
 // Entire app database state that gets synchronized

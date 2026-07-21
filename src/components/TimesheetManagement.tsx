@@ -5,6 +5,7 @@
 
 import React, { useState } from "react";
 import { AppState, TimesheetEntry, User } from "../types";
+import { UserAvatar } from "./UserAvatar";
 import { 
   Calendar, 
   Clock, 
@@ -22,7 +23,9 @@ import {
   User as UserIcon,
   Fingerprint,
   CalendarDays,
-  FileSignature
+  FileSignature,
+  Bell,
+  BellRing
 } from "lucide-react";
 
 interface TimesheetManagementProps {
@@ -59,6 +62,59 @@ export default function TimesheetManagement({
   const [observacoes, setObservacoes] = useState("");
 
   const isMasterOrGerente = userRole === "Master" || userRole === "Gerente";
+
+  const [notifPermission, setNotifPermission] = useState<string>(
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "default"
+  );
+
+  const requestNotifPermission = () => {
+    if (!("Notification" in window)) {
+      alert("Seu navegador não suporta a API de Notificações.");
+      return;
+    }
+    Notification.requestPermission().then((perm) => {
+      setNotifPermission(perm);
+      if (perm === "granted") {
+        sendBrowserNotification("Notificações Ativas! 🔔", "Alertas locais do Ponto Eletrônico foram configurados com sucesso.");
+      } else {
+        alert("Permissão de notificação negada pelo navegador.");
+      }
+    });
+  };
+
+  // Browser Notification helper for local point registration alerts
+  const sendBrowserNotification = (title: string, message: string) => {
+    if (!("Notification" in window)) {
+      console.warn("API de notificações não suportada no ambiente do navegador.");
+      return;
+    }
+
+    const deliver = () => {
+      try {
+        const notif = new Notification(title, {
+          body: message,
+          icon: "/icon.svg",
+          badge: "/icon.svg",
+          tag: "ponto-eletronico",
+        });
+        notif.onclick = () => {
+          window.focus();
+        };
+      } catch (err) {
+        console.error("Erro ao disparar notificação local:", err);
+      }
+    };
+
+    if (Notification.permission === "granted") {
+      deliver();
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          deliver();
+        }
+      });
+    }
+  };
 
   // Time parsing/calculation helpers
   const parseTimeToMinutes = (t: string): number => {
@@ -134,6 +190,11 @@ export default function TimesheetManagement({
       "Regular"
     );
 
+    sendBrowserNotification(
+      "Ponto Registrado ⏱️",
+      `Folha de Ponto: Registro efetuado para ${selectedUser.nomeCompleto} (${targetDate.split("-").reverse().join("/")}).`
+    );
+
     alert("Ponto registrado com sucesso! Comprovante disponível para download em imagem.");
     setObservacoes("");
     setActiveTab("folha-historico");
@@ -168,6 +229,10 @@ export default function TimesheetManagement({
       };
       updatedEntries = [newEntry, ...entries];
       onAddAuditLog("CADASTRO", "Folha de Ponto", `Frentista ${currentUser.nomeCompleto} bateu ENTRADA às ${nowTime}`, "Regular");
+      sendBrowserNotification(
+        "Ponto Registrado - ENTRADA ⏱️",
+        `${currentUser.nomeCompleto} registrou ENTRADA às ${nowTime}.`
+      );
       alert(`Entrada registrada com sucesso às ${nowTime}!`);
     } else {
       if (existingIndex === -1) {
@@ -185,6 +250,10 @@ export default function TimesheetManagement({
         }
         entryCopy.intervaloInicio = nowTime;
         onAddAuditLog("ALTERACAO", "Folha de Ponto", `${currentUser.nomeCompleto} iniciou INTERVALO às ${nowTime}`, "Regular");
+        sendBrowserNotification(
+          "Ponto Registrado - INÍCIO INTERVALO ⏱️",
+          `${currentUser.nomeCompleto} iniciou INTERVALO às ${nowTime}.`
+        );
       } else if (type === "int-fim") {
         if (!entryCopy.intervaloInicio) {
           alert("Você precisa iniciar o intervalo primeiro!");
@@ -196,6 +265,10 @@ export default function TimesheetManagement({
         }
         entryCopy.intervaloFim = nowTime;
         onAddAuditLog("ALTERACAO", "Folha de Ponto", `${currentUser.nomeCompleto} encerrou INTERVALO às ${nowTime}`, "Regular");
+        sendBrowserNotification(
+          "Ponto Registrado - FIM INTERVALO ⏱️",
+          `${currentUser.nomeCompleto} retornou do INTERVALO às ${nowTime}.`
+        );
       } else if (type === "saida") {
         if (entryCopy.saida) {
           alert("Ponto de saída já registrado hoje!");
@@ -204,6 +277,10 @@ export default function TimesheetManagement({
         entryCopy.saida = nowTime;
         entryCopy.horasTrabalhadas = getHoursWorked(entryCopy.entrada, nowTime, entryCopy.intervaloInicio, entryCopy.intervaloFim);
         onAddAuditLog("ALTERACAO", "Folha de Ponto", `${currentUser.nomeCompleto} bateu SAÍDA às ${nowTime}. Total: ${entryCopy.horasTrabalhadas}`, "Regular");
+        sendBrowserNotification(
+          "Ponto Registrado - SAÍDA ⏱️",
+          `${currentUser.nomeCompleto} registrou SAÍDA às ${nowTime}. Total: ${entryCopy.horasTrabalhadas}.`
+        );
       }
 
       entryCopy.dataHoraRegistro = currentFullStamp;
@@ -465,8 +542,24 @@ export default function TimesheetManagement({
           <p className="text-xs text-slate-500 font-medium">Controle de presença frentistas, intervalos e espelho de ponto oficial</p>
         </div>
 
-        {/* Tab selection */}
-        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200/50 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={requestNotifPermission}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
+              notifPermission === "granted"
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+            }`}
+            title="Clique para ativar/testar notificações de registro de ponto no seu navegador"
+          >
+            {notifPermission === "granted" ? <BellRing className="h-3.5 w-3.5 text-emerald-600" /> : <Bell className="h-3.5 w-3.5 text-amber-600 animate-bounce" />}
+            <span className="hidden sm:inline">
+              {notifPermission === "granted" ? "Notificações Ativas" : "Ativar Notificações"}
+            </span>
+          </button>
+
+          {/* Tab selection */}
+          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200/50 flex-1 sm:flex-initial">
           <button
             onClick={() => setActiveTab("bater-ponto")}
             className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
@@ -496,6 +589,7 @@ export default function TimesheetManagement({
           </button>
         </div>
       </div>
+      </div>
 
       {/* Main Content Router */}
       {activeTab === "bater-ponto" && (
@@ -510,6 +604,18 @@ export default function TimesheetManagement({
                 Bater Ponto Agora
               </h2>
               <p className="text-[11px] text-slate-400 mt-1">Registre sua jornada em tempo real com carimbo de geolocalização e data/hora do servidor.</p>
+            </div>
+
+            {/* Current user badge with avatar */}
+            <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-800/80 flex items-center gap-3">
+              <UserAvatar user={currentUser} size="lg" />
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Operador Atual</span>
+                <p className="text-xs font-black text-white truncate">{currentUser.nomeCompleto}</p>
+                <span className="text-[9.5px] font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-800/50 px-2 py-0.5 rounded-full inline-block mt-0.5">
+                  {currentUser.cargo}
+                </span>
+              </div>
             </div>
 
             <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 text-center space-y-2">
@@ -578,24 +684,27 @@ export default function TimesheetManagement({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Colaborador / Funcionário</label>
-                  {isMasterOrGerente ? (
-                    <select
-                      value={targetEmployeeId}
-                      onChange={(e) => setTargetEmployeeId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold mt-1.5 text-slate-700 outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition"
-                    >
-                      {users.map(u => (
-                        <option key={u.id} value={u.id}>{u.nomeCompleto} ({u.cargo})</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={currentUser.nomeCompleto}
-                      disabled
-                      className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold mt-1.5 text-slate-500 outline-none"
-                    />
-                  )}
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <UserAvatar user={users.find(u => u.id === targetEmployeeId) || currentUser} size="md" />
+                    {isMasterOrGerente ? (
+                      <select
+                        value={targetEmployeeId}
+                        onChange={(e) => setTargetEmployeeId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition cursor-pointer"
+                      >
+                        {users.map(u => (
+                          <option key={u.id} value={u.id}>{u.nomeCompleto} ({u.cargo})</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={currentUser.nomeCompleto}
+                        disabled
+                        className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-500 outline-none"
+                      />
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -783,10 +892,8 @@ export default function TimesheetManagement({
                       return (
                         <tr key={entry.id} className="hover:bg-slate-50/50 transition">
                           <td className="py-4 px-6">
-                            <div className="flex items-center gap-2">
-                              <div className="h-8 w-8 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center text-slate-600 font-black text-xs">
-                                {entry.userName.substring(0, 2).toUpperCase()}
-                              </div>
+                            <div className="flex items-center gap-2.5">
+                              <UserAvatar user={users.find(u => u.id === entry.userId || u.nomeCompleto === entry.userName)} name={entry.userName} size="sm" />
                               <div>
                                 <p className="text-xs font-extrabold text-slate-800 leading-tight">{entry.userName}</p>
                                 <span className="text-[10px] font-bold text-slate-400">Posto Central</span>

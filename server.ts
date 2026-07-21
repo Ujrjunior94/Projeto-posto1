@@ -15,7 +15,9 @@ const ai = new GoogleGenAI({
   },
 });
 
-const BACKUP_FILE = path.join(process.cwd(), "backups.json");
+const BACKUP_FILE = (process.env.FUNCTIONS_EMULATOR || process.env.FUNCTION_SIGNATURE_TYPE || process.env.FIREBASE_CONFIG || process.env.FUNCTION_TARGET)
+  ? "/tmp/backups.json"
+  : path.join(process.cwd(), "backups.json");
 
 // Helper to read backup file safely
 function readBackups() {
@@ -39,9 +41,8 @@ function writeBackups(backups: any) {
   }
 }
 
-async function startServer() {
+export async function createExpressApp() {
   const app = express();
-  const PORT = 3000;
 
   // Middleware for parsing JSON with a 15mb limit to allow complete system backups
   app.use(express.json({ limit: "15mb" }));
@@ -68,32 +69,37 @@ async function startServer() {
         return res.status(400).json({ error: "Imagem e mimeType são obrigatórios." });
       }
 
-      const prompt = `Analise a imagem da escala de trabalho de um posto de combustíveis.
-      Sua tarefa é extrair três tipos de informações de forma estruturada:
-      1. Lista única de funcionários (employees): Todos os nomes de pessoas físicas identificados na escala.
-      2. Turnos de trabalho (schedules): Mapeamento de datas para turnos (Manhã, Tarde, Noite, etc.) e o nome do funcionário responsável.
+      const prompt = `Analise a imagem da escala de trabalho ou escala de plantão de um posto de combustíveis.
+      Sua tarefa é ler a imagem e extrair três tipos de informações estruturadas:
+      1. Lista única de funcionários (employees): Todos os nomes de pessoas físicas identificadas na imagem (frentistas, gerentes, supervisores, lavadores).
+      2. Turnos de trabalho (schedules): Mapeamento de datas para turnos de trabalho e o nome do funcionário responsável.
       3. Eventos (events): Reuniões, manutenções, auditorias ou treinamentos com data, título, tipo e horário.
 
       Regras de Negócio:
-      - Mapeamento de Turnos: Se encontrar códigos como T2, T3 ou T4, converta-os obrigatoriamente: T2 = Manhã, T3 = Tarde, T4 = Noite.
-      - Formato de Data: YYYY-MM-DD. Use o ano corrente (2026) se não especificado.
+      - Padronização de Turnos:
+        * T2, Manhã, M, 1º Turno, 06-14h -> "Manhã (06h - 14h)"
+        * T3, Tarde, T, 2º Turno, 14-22h -> "Tarde (14h - 22h)"
+        * T4, Noite, N, 3º Turno, 22-06h -> "Noite (22h - 06h)"
+        * Folga, F, Repouso, DSR -> "Folga Geral"
+        * Horista, Intermediário, H -> "Horista (10h - 18h)"
+      - Formato de Data: YYYY-MM-DD. Se a imagem mostrar apenas os dias do mês (ex: 1, 2, 3... ou Dia 01, Dia 02...), assuma o mês e ano corrente (ex: 2026-07-01, 2026-07-02, etc.).
       - Formato de Horário: HH:MM.
-      - Nomes: Use o nome completo ou como aparece na imagem, padronizando para Capitalize.
+      - Nomes de Funcionários: Padronize com letras maiúsculas/minúsculas limpas (Capitalized, ex: "João Silva").
       - Tipos de Evento Permitidos: Treinamento, Reunião, Manutenção, Auditoria, Outro.
 
       Retorne APENAS um JSON seguindo exatamente este esquema:
       {
         "employees": ["Nome Completo 1", "Nome Completo 2"],
         "schedules": [
-          { "data": "YYYY-MM-DD", "turno": "Manhã", "frentistaResponsavel": "Nome do Funcionário" }
+          { "data": "2026-07-01", "turno": "Manhã (06h - 14h)", "frentistaResponsavel": "Nome do Funcionário" }
         ],
         "events": [
-          { "data": "YYYY-MM-DD", "titulo": "Reunião Geral", "tipo": "Reunião", "horario": "09:00", "descricao": "Pauta da reunião" }
+          { "data": "2026-07-01", "titulo": "Reunião Geral", "tipo": "Reunião", "horario": "09:00", "descricao": "Pauta da reunião" }
         ]
       }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.6-flash",
         contents: {
           parts: [
             { text: prompt },
@@ -220,6 +226,13 @@ async function startServer() {
     }
   });
 
+  return app;
+}
+
+export async function startServer() {
+  const app = await createExpressApp();
+  const PORT = 3000;
+
   // --- VITE DEVELOPMENT MIDDLEWARE OR PRODUCTION SERVING ---
 
   if (process.env.NODE_ENV !== "production") {
@@ -243,6 +256,16 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error("Failed to start server:", err);
-});
+// Avoid starting the standalone server when imported inside a Firebase Function environment
+const isFirebaseFunction = !!(
+  process.env.FUNCTIONS_EMULATOR || 
+  process.env.FUNCTION_SIGNATURE_TYPE || 
+  process.env.FIREBASE_CONFIG ||
+  process.env.FUNCTION_TARGET
+);
+
+if (!isFirebaseFunction) {
+  startServer().catch((err) => {
+    console.error("Failed to start server:", err);
+  });
+}

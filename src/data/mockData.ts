@@ -16,6 +16,7 @@ export const INITIAL_STATE: AppState = {
       cargo: "Master",
       cnpjPosto: "12.345.678/0001-99",
       telefone: "(11) 98765-4321",
+      avatarIcon: "🛡️",
     },
     {
       id: "u2",
@@ -26,6 +27,7 @@ export const INITIAL_STATE: AppState = {
       cargo: "Gerente",
       cnpjPosto: "12.345.678/0001-99",
       telefone: "(11) 91234-5678",
+      avatarIcon: "👩‍💼",
     },
     {
       id: "u3",
@@ -36,6 +38,7 @@ export const INITIAL_STATE: AppState = {
       cargo: "Frentista",
       cnpjPosto: "12.345.678/0001-99",
       telefone: "(11) 95555-4444",
+      avatarIcon: "⛽",
     },
   ],
   tanks: [
