@@ -37,7 +37,11 @@ import {
   X,
   Search,
   Filter,
-  Layers
+  Layers,
+  Share2,
+  Copy,
+  Globe,
+  ExternalLink
 } from "lucide-react";
 
 interface CloudSyncPanelProps {
@@ -444,7 +448,17 @@ export default function CloudSyncPanel({
   const [visiblePasswords, setVisiblePasswords] = useState<{ [key: string]: boolean }>({});
 
   // Firestore Sync Table States
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [isSyncingFirestore, setIsSyncingFirestore] = useState(false);
+
+  const handleCopyShareLink = () => {
+    const shareUrl = "https://ais-pre-lm6st5ndq4ild6xlpv5ha3-627952343829.us-west2.run.app";
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedShareLink(true);
+    setSyncStatus({ type: "success", message: "Link de compartilhamento copiado! Qualquer usuário que acessar poderá visualizar e sincronizar os dados do posto." });
+    setTimeout(() => setCopiedShareLink(false), 3000);
+    setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
+  };
   const [syncFilterStatus, setSyncFilterStatus] = useState<"all" | "pending" | "synced">("all");
   const [syncFilterModule, setSyncFilterModule] = useState<string>("all");
   const [syncSearchTerm, setSyncSearchTerm] = useState<string>("");
@@ -784,6 +798,72 @@ export default function CloudSyncPanel({
           {syncStatus.message}
         </div>
       )}
+
+      {/* BANNER: Link de Acesso Global & Sincronização em Qualquer Local */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 shadow-md border border-slate-800 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
+                <Globe className="h-4 w-4" />
+              </span>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                Acesso Global e Sincronização Ativa
+              </span>
+            </div>
+            <h3 className="text-lg font-bold font-display text-white">
+              Sincronizar com Banco de Dados em Qualquer Local
+            </h3>
+            <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+              Utilize o link de compartilhamento abaixo para acessar o sistema de qualquer computador, tablet ou smartphone. Todos os dados inseridos são sincronizados em tempo real com o banco de dados Firebase Firestore.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleCopyShareLink}
+              className={`px-5 py-3 rounded-2xl font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
+                copiedShareLink
+                  ? "bg-emerald-500 text-white"
+                  : "bg-indigo-600 hover:bg-indigo-500 text-white"
+              }`}
+            >
+              {copiedShareLink ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  <span>Link Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copiar Link de Compartilhamento</span>
+                </>
+              )}
+            </button>
+
+            <a
+              href="https://ais-pre-lm6st5ndq4ild6xlpv5ha3-627952343829.us-west2.run.app"
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 border border-white/10 cursor-pointer"
+            >
+              <ExternalLink className="h-4 w-4 text-slate-300" />
+              <span>Abrir App</span>
+            </a>
+          </div>
+        </div>
+
+        <div className="bg-slate-950/60 p-3 rounded-2xl border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+          <div className="flex items-center gap-2 truncate text-slate-300">
+            <Share2 className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+            <span className="truncate">https://ais-pre-lm6st5ndq4ild6xlpv5ha3-627952343829.us-west2.run.app</span>
+          </div>
+          <span className="text-[10px] text-emerald-400 font-sans font-bold bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 shrink-0 self-start sm:self-auto">
+            🟢 Firestore Cloud Online
+          </span>
+        </div>
+      </div>
 
       {/* SECTION: Logged User Profile Editing */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
