@@ -3094,8 +3094,8 @@ export default function ShiftsChecklists({
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
-                              {Object.keys(sh.checklist).map((item) => {
-                                const checked = sh.checklist[item as keyof typeof sh.checklist];
+                              {Object.keys(sh.checklist || {}).map((item) => {
+                                const checked = sh.checklist ? sh.checklist[item as keyof typeof sh.checklist] : false;
                                 const labels: { [key: string]: string } = {
                                   limpezaPistas: "Limpeza das Pistas",
                                   usoEPIs: "Uso obrigatório de EPIs",
@@ -3165,16 +3165,16 @@ export default function ShiftsChecklists({
                               Checklist de pista finalizado e arquivado
                             </span>
                             <div className="flex gap-2 font-mono text-[9px]">
-                              <span className={sh.checklist.limpezaPistas ? "text-emerald-600" : "text-rose-600"}>
-                                PISTA: {sh.checklist.limpezaPistas ? "OK" : "PEND"}
+                              <span className={sh.checklist?.limpezaPistas ? "text-emerald-600" : "text-rose-600"}>
+                                PISTA: {sh.checklist?.limpezaPistas ? "OK" : "PEND"}
                               </span>
                               <span>•</span>
-                              <span className={sh.checklist.usoEPIs ? "text-emerald-600" : "text-rose-600"}>
-                                EPI: {sh.checklist.usoEPIs ? "OK" : "PEND"}
+                              <span className={sh.checklist?.usoEPIs ? "text-emerald-600" : "text-rose-600"}>
+                                EPI: {sh.checklist?.usoEPIs ? "OK" : "PEND"}
                               </span>
                               <span>•</span>
-                              <span className={sh.checklist.testeGerador ? "text-emerald-600" : "text-rose-600"}>
-                                GERADOR: {sh.checklist.testeGerador ? "OK" : "PEND"}
+                              <span className={sh.checklist?.testeGerador ? "text-emerald-600" : "text-rose-600"}>
+                                GERADOR: {sh.checklist?.testeGerador ? "OK" : "PEND"}
                               </span>
                             </div>
                           </div>
@@ -4079,11 +4079,11 @@ export default function ShiftsChecklists({
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-white p-2.5 rounded-xl border border-indigo-100/60 shadow-sm">
                       <span className="text-[10px] font-bold text-slate-400 block uppercase">Plantões</span>
-                      <span className="text-lg font-black text-indigo-700">{aiImportModalData.schedules.length}</span>
+                      <span className="text-lg font-black text-indigo-700">{(aiImportModalData.schedules || []).length}</span>
                     </div>
                     <div className="bg-white p-2.5 rounded-xl border border-indigo-100/60 shadow-sm">
                       <span className="text-[10px] font-bold text-slate-400 block uppercase">Eventos</span>
-                      <span className="text-lg font-black text-purple-700">{aiImportModalData.events.length}</span>
+                      <span className="text-lg font-black text-purple-700">{(aiImportModalData.events || []).length}</span>
                     </div>
                   </div>
                 </div>
@@ -4093,7 +4093,7 @@ export default function ShiftsChecklists({
               <div className="md:col-span-7 space-y-4 flex flex-col">
                 <div>
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
-                    <span>Funcionários Reconhecidos ({aiImportModalData.recognizedUsers.length})</span>
+                    <span>Funcionários Reconhecidos ({(aiImportModalData.recognizedUsers || []).length})</span>
                     <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
                       Cadastros Prévios
                     </span>
@@ -4104,7 +4104,7 @@ export default function ShiftsChecklists({
                 </div>
 
                 <div className="space-y-3 max-h-80 overflow-y-auto pr-1 flex-1">
-                  {aiImportModalData.recognizedUsers.map((userItem, idx) => (
+                  {(aiImportModalData.recognizedUsers || []).map((userItem, idx) => (
                     <div
                       key={idx}
                       className={`p-3 rounded-2xl border transition ${
@@ -4200,7 +4200,7 @@ export default function ShiftsChecklists({
             {/* Footer */}
             <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center shrink-0">
               <span className="text-xs text-slate-500 font-medium">
-                {aiImportModalData.recognizedUsers.filter((u) => u.selected && !u.isExisting).length} novos cadastros selecionados
+                {(aiImportModalData.recognizedUsers || []).filter((u) => u.selected && !u.isExisting).length} novos cadastros selecionados
               </span>
 
               <div className="flex gap-2">

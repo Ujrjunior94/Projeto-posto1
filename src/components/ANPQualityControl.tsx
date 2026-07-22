@@ -379,7 +379,7 @@ export default function ANPQualityControl({
     // Table
     const tableData = rowsToExport.map((c) => {
       const nozzle = nozzles.find((n) => n.id === c.nozzleId);
-      const tank = nozzle ? appState.tanks.find(t => t.id === nozzle.tanqueId) : null;
+      const tank = nozzle ? (appState.tanks || []).find(t => t.id === nozzle.tanqueId) : null;
       const fuelInfo = tank ? `(${tank.combustivel})` : "";
       
       return [
@@ -547,7 +547,7 @@ export default function ANPQualityControl({
                 >
                   <option value="">Selecione o Bico</option>
                   {nozzles.map((n) => {
-                    const tank = appState.tanks.find((t) => t.id === n.tanqueId);
+                    const tank = (appState.tanks || []).find((t) => t.id === n.tanqueId);
                     return (
                       <option key={n.id} value={n.id}>
                         Bico {n.numeroBico} ({tank ? tank.combustivel : "Sem combustível"}) - Bomba {n.bombaAssociada}

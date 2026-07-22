@@ -102,6 +102,8 @@ export interface NozzleClosing {
   encerranteFinal: number; // in liters
   litrosVendidos: number; // calculated: encerranteFinal - encerranteInicial
   valorVendidoCalculado: number; // calculated: litrosVendidos * precoPorLitro
+  assinaturaDigital?: string; // Data URL string of captured mouse/touch signature
+  frentistaResponsavel?: string;
 }
 
 // Turn audit (fechamento de caixa/turno)

@@ -19,7 +19,7 @@ import {
   Info,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 interface LMCManagementProps {
   appState: AppState;
@@ -335,7 +335,7 @@ export default function LMCManagement({
         doc.text(`Produto: ${fuel}`, startX, currentY);
         currentY += 3;
 
-        (doc as any).autoTable({
+        autoTable(doc, {
           startY: currentY,
           head: [["Data", "Est. Inicial", "Entrega", "Venda", "Est. Físico", "Sobra/Falta"]],
           body: tableData,
@@ -515,8 +515,8 @@ export default function LMCManagement({
 
       // Find nozzles
       const mappedFuel = mapLmcFuelToTankFuel(fuelType);
-      const matchedTanks = appState.tanks.filter(t => t.combustivel === mappedFuel);
-      const matchedNozzles = appState.nozzles.filter(n => matchedTanks.some(t => t.id === n.tanqueId));
+      const matchedTanks = (appState.tanks || []).filter(t => t.combustivel === mappedFuel);
+      const matchedNozzles = (appState.nozzles || []).filter(n => matchedTanks.some(t => t.id === n.tanqueId));
 
       doc.setFont("helvetica", "normal");
       if (matchedNozzles.length === 0) {
@@ -735,8 +735,8 @@ export default function LMCManagement({
 
             // Find bicos e encerrantes
             const mappedFuel = mapLmcFuelToTankFuel(viewFuel);
-            const matchedTanks = appState.tanks.filter(t => t.combustivel === mappedFuel);
-            const matchedNozzles = appState.nozzles.filter(n => matchedTanks.some(t => t.id === n.tanqueId));
+            const matchedTanks = (appState.tanks || []).filter(t => t.combustivel === mappedFuel);
+            const matchedNozzles = (appState.nozzles || []).filter(n => matchedTanks.some(t => t.id === n.tanqueId));
             const soldPerNozzle = Number((sold / (matchedNozzles.length || 1)).toFixed(1));
 
             // Finance estimated breakdown

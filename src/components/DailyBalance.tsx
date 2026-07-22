@@ -314,7 +314,7 @@ export default function DailyBalance({
                 Distribuição por Meio de Pagamento
               </h3>
               
-              {filteredBalances.length > 0 ? (
+              {filteredBalances.length > 0 && filteredBalances[0]?.metodosPagamento ? (
                 <div className="space-y-4">
                   {Object.entries(filteredBalances[0].metodosPagamento).map(([key, val]) => (
                     <div key={key} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">

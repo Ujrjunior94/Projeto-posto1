@@ -24,6 +24,7 @@ import SupplyRequests from "./components/SupplyRequests";
 import TimesheetManagement from "./components/TimesheetManagement";
 import { UserAvatar } from "./components/UserAvatar";
 import WelcomeOnboarding from "./components/WelcomeOnboarding";
+import PWAModal from "./components/PWAModal";
 
 import {
   LayoutDashboard,
@@ -151,6 +152,7 @@ export default function App() {
     };
   }, [appState, currentUser]);
   const [showPwaBanner, setShowPwaBanner] = useState(true);
+  const [isPwaModalOpen, setIsPwaModalOpen] = useState(false);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -167,15 +169,22 @@ export default function App() {
   }, []);
 
   const handleInstallPWA = async () => {
-    if (!deferredPrompt) {
-      alert("Para instalar este Web App no seu celular ou computador:\n- No Chrome/Android: toque no menu (⋮) e selecione 'Adicionar à tela inicial' ou 'Instalar aplicativo'.\n- No iOS/Safari: toque no botão Compartilhar (⎘) e escolha 'Adicionar à Tela de Início'.");
-      return;
-    }
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      setIsInstallable(false);
-      setDeferredPrompt(null);
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === "accepted") {
+          setIsInstallable(false);
+          setDeferredPrompt(null);
+          setIsPwaModalOpen(false);
+        } else {
+          setIsPwaModalOpen(true);
+        }
+      } catch (err) {
+        setIsPwaModalOpen(true);
+      }
+    } else {
+      setIsPwaModalOpen(true);
     }
   };
 
@@ -569,88 +578,120 @@ export default function App() {
   // Check role constraints: Frentistas can only view Dashboard, Caixa & Turnos checklists
   const isFrentista = currentUser.cargo === "Frentista";
 
-  // Sidebar Menu Tabs Definitions with Permission guards
-  const navigationItems = [
-    { id: "dashboard", name: "Dashboard", icon: LayoutDashboard, frentistaAllowed: true },
-    { id: "caixa", name: "Leitura de Bicos", icon: ClipboardList, frentistaAllowed: true },
-    { id: "balanco", name: "Balanço Diário", icon: BarChart3, frentistaAllowed: false },
-    { id: "escalas", name: "Escala & Checklists", icon: ClipboardList, frentistaAllowed: true },
-    { id: "ponto", name: "Folha de Ponto", icon: Fingerprint, frentistaAllowed: true },
-    { id: "tanques", name: "Controle de Tanques", icon: Fuel, frentistaAllowed: false },
-    { id: "pedidos", name: "Pedidos de Material", icon: Package, frentistaAllowed: true },
-    { id: "lubrificantes", name: "Recebimento de Lubrif.", icon: Droplets, frentistaAllowed: true },
-    { id: "faltas", name: "Faltas de Caixa", icon: AlertTriangle, frentistaAllowed: true },
-    { id: "bicos", name: "Bicos & Bombas", icon: Activity, frentistaAllowed: false },
-    { id: "qualidade", name: "Qualidade ANP", icon: Thermometer, frentistaAllowed: false },
-    { id: "lmc", name: "Livro LMC (ANP)", icon: BookOpen, frentistaAllowed: false },
-    { id: "relatorios", name: "Relatórios & PDF", icon: FileText, frentistaAllowed: false },
-    { id: "sincronizacao", name: "Sistemas & Segurança", icon: Cloud, frentistaAllowed: false },
-    { id: "auditoria", name: "Auditoria ERP", icon: History, frentistaAllowed: false },
+  // Sidebar Menu Tabs Definitions with Permission guards grouped by section
+  const navigationSections = [
+    {
+      title: "Visão Geral",
+      items: [
+        { id: "dashboard", name: "Dashboard", icon: LayoutDashboard, frentistaAllowed: true },
+        { id: "balanco", name: "Balanço Diário", icon: BarChart3, frentistaAllowed: false },
+      ],
+    },
+    {
+      title: "Pista & Operação",
+      items: [
+        { id: "caixa", name: "Leitura de Bicos", icon: ClipboardList, frentistaAllowed: true },
+        { id: "escalas", name: "Escala & Checklists", icon: ClipboardList, frentistaAllowed: true },
+        { id: "ponto", name: "Folha de Ponto", icon: Fingerprint, frentistaAllowed: true },
+        { id: "pedidos", name: "Pedidos de Material", icon: Package, frentistaAllowed: true },
+        { id: "lubrificantes", name: "Recebimento Lubrif.", icon: Droplets, frentistaAllowed: true },
+      ],
+    },
+    {
+      title: "Estoque & Bombas",
+      items: [
+        { id: "tanques", name: "Controle de Tanques", icon: Fuel, frentistaAllowed: false },
+        { id: "bicos", name: "Bicos & Bombas", icon: Activity, frentistaAllowed: false },
+        { id: "faltas", name: "Faltas de Caixa", icon: AlertTriangle, frentistaAllowed: true },
+      ],
+    },
+    {
+      title: "ANP, Fiscal & ERP",
+      items: [
+        { id: "qualidade", name: "Qualidade ANP", icon: Thermometer, frentistaAllowed: false },
+        { id: "lmc", name: "Livro LMC (ANP)", icon: BookOpen, frentistaAllowed: false },
+        { id: "relatorios", name: "Relatórios & PDF", icon: FileText, frentistaAllowed: false },
+        { id: "sincronizacao", name: "Sistemas & Cloud", icon: Cloud, frentistaAllowed: false },
+        { id: "auditoria", name: "Auditoria ERP", icon: History, frentistaAllowed: false },
+      ],
+    },
   ];
 
+  const navigationItems = navigationSections.flatMap((s) => s.items);
+
   return (
-    <div className="min-h-screen bg-[#F9F9F7] flex text-[#0F172A] font-sans pb-16 lg:pb-0">
+    <div className="min-h-screen bg-[#F8FAFC] flex text-[#0F172A] font-sans pb-16 lg:pb-0">
       
       {/* 1. SIDEBAR DESKTOP */}
-      <aside className="hidden lg:flex flex-col w-64 bg-[#0A192F] border-r border-slate-800/80 p-5 shrink-0 justify-between">
-        <div className="space-y-6">
+      <aside className="hidden lg:flex flex-col w-64 bg-[#0F172A] border-r border-slate-800/80 p-4 shrink-0 justify-between h-screen sticky top-0">
+        <div className="space-y-4 overflow-y-auto pr-1">
           {/* Logo Brand */}
-          <div className="flex items-center gap-3 pb-4 border-b border-slate-800/80">
-            <div className="h-10 w-10 rounded-2xl bg-[#00B880] flex items-center justify-center text-white font-bold shadow-lg shadow-[#00B880]/20">
-              <Building2 className="h-5 w-5" />
+          <div className="flex items-center gap-3 pb-3 border-b border-slate-800/80">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-[#059669] to-[#10B981] flex items-center justify-center text-white font-bold shadow-md shadow-emerald-950/40 shrink-0">
+              <Building2 className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <h1 className="font-extrabold text-white tracking-tight text-lg font-display truncate max-w-[150px]" title={appState.nomePosto || "Meu Posto"}>
+            <div className="truncate min-w-0">
+              <h1 className="font-extrabold text-white tracking-tight text-base font-display truncate" title={appState.nomePosto || "Meu Posto"}>
                 {appState.nomePosto || "Meu Posto"}
               </h1>
-              <span className="text-[10px] text-[#00B880] font-mono uppercase tracking-widest font-semibold">
+              <span className="text-[10px] text-[#10B981] font-mono uppercase tracking-widest font-semibold block truncate">
                 ERP Sincronizado
               </span>
             </div>
           </div>
 
-          {/* Nav Items */}
-          <nav className="space-y-1.5">
-            {navigationItems.map((item) => {
-              const isAllowed = item.frentistaAllowed || !isFrentista;
-              const IconComponent = item.icon;
+          {/* Nav Sections */}
+          <nav className="space-y-4 pt-1">
+            {navigationSections.map((sec, secIdx) => (
+              <div key={secIdx} className="space-y-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 block">
+                  {sec.title}
+                </span>
 
-              return (
-                <button
-                  key={item.id}
-                  disabled={!isAllowed}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                  }}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-bold transition group relative cursor-pointer ${
-                    activeTab === item.id
-                      ? "bg-[#00B880] text-white shadow-md shadow-[#00B880]/20"
-                      : isAllowed
-                      ? "text-slate-300 hover:bg-slate-800/60 hover:text-white"
-                      : "text-slate-600 cursor-not-allowed"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <IconComponent className={`h-4 w-4 ${activeTab === item.id ? "text-white" : "text-slate-400"}`} />
-                    <span>{item.name}</span>
-                  </div>
-                  
-                  {!isAllowed && (
-                    <Lock className="h-3.5 w-3.5 text-slate-600" title="Acesso Restrito a Gerentes/Master" />
-                  )}
-                </button>
-              );
-            })}
+                <div className="space-y-0.5">
+                  {sec.items.map((item) => {
+                    const isAllowed = item.frentistaAllowed || !isFrentista;
+                    const IconComponent = item.icon;
+
+                    return (
+                      <button
+                        key={item.id}
+                        disabled={!isAllowed}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition group relative cursor-pointer ${
+                          activeTab === item.id
+                            ? "bg-[#10B981] text-white shadow-md shadow-emerald-900/30 font-extrabold"
+                            : isAllowed
+                            ? "text-slate-300 hover:bg-slate-800/60 hover:text-white"
+                            : "text-slate-600 cursor-not-allowed"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 truncate min-w-0">
+                          <IconComponent className={`h-4 w-4 shrink-0 ${activeTab === item.id ? "text-white" : "text-slate-400 group-hover:text-slate-200"}`} />
+                          <span className="truncate">{item.name}</span>
+                        </div>
+                        
+                        {!isAllowed && (
+                          <Lock className="h-3.5 w-3.5 text-slate-600 shrink-0 ml-1" title="Acesso Restrito a Gerentes/Master" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </div>
 
         {/* User Info bottom card */}
-        <div className="pt-4 border-t border-slate-800/80 space-y-3">
-          <div className="flex items-center gap-3 bg-slate-900/80 p-3 rounded-2xl border border-slate-800/60">
-            <UserAvatar user={currentUser} size="md" />
+        <div className="pt-3 border-t border-slate-800/80 space-y-2.5 shrink-0">
+          <div className="flex items-center gap-2.5 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800">
+            <UserAvatar user={currentUser} size="sm" />
             <div className="truncate min-w-0">
-              <p className="text-xs font-black text-white truncate">{currentUser.nomeCompleto}</p>
-              <span className="text-[10px] bg-slate-800 text-emerald-300 border border-slate-700 px-2 py-0.5 rounded-full font-semibold">
+              <p className="text-xs font-bold text-white truncate">{currentUser.nomeCompleto}</p>
+              <span className="text-[10px] bg-slate-800 text-emerald-400 border border-slate-700/80 px-2 py-0.5 rounded-full font-semibold inline-block">
                 {currentUser.cargo}
               </span>
             </div>
@@ -663,7 +704,7 @@ export default function App() {
                 {syncConfig.autoSync ? (
                   <>
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00B880]"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
                   </>
                 ) : (
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
@@ -674,34 +715,36 @@ export default function App() {
             <span className="font-mono text-[9.5px] uppercase tracking-wider text-slate-300 font-bold">{syncConfig.autoSync ? "Ativo" : "Pause"}</span>
           </div>
 
-          <button
-            onClick={handleInstallPWA}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-[#00B880]/15 border border-[#00B880]/40 hover:bg-[#00B880]/25 text-[#00B880] font-extrabold text-xs rounded-xl transition shadow-2xs cursor-pointer"
-            title="Instalar o aplicativo no dispositivo (PWA)"
-          >
-            <Smartphone className="h-4 w-4" />
-            Instalar Web App (PWA)
-          </button>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={handleInstallPWA}
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-[#10B981]/15 border border-[#10B981]/30 hover:bg-[#10B981]/25 text-[#10B981] font-bold text-[11px] rounded-xl transition cursor-pointer"
+              title="Instalar Web App PWA"
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              PWA
+            </button>
 
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-rose-950/30 border border-rose-900/40 hover:bg-rose-900/40 text-rose-300 font-bold text-xs rounded-xl transition cursor-pointer"
-          >
-            <LogOut className="h-4 w-4" />
-            Desconectar
-          </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-rose-950/30 border border-rose-900/40 hover:bg-rose-900/40 text-rose-300 font-bold text-[11px] rounded-xl transition cursor-pointer"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sair
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* 2. SIDEBAR MOBILE */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-50 lg:hidden flex">
-          <div className="w-64 bg-[#0A192F] p-5 flex flex-col justify-between h-full border-r border-slate-800">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+          <div className="w-72 bg-[#0F172A] p-4 flex flex-col justify-between h-full border-r border-slate-800">
+            <div className="space-y-4 overflow-y-auto pr-1">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-[#00B880]" />
-                  <span className="font-bold text-white font-display truncate max-w-[130px]" title={appState.nomePosto || "Meu Posto"}>
+                  <Building2 className="h-5 w-5 text-[#10B981]" />
+                  <span className="font-bold text-white font-display truncate max-w-[150px]" title={appState.nomePosto || "Meu Posto"}>
                     {appState.nomePosto || "Meu Posto"}
                   </span>
                 </div>
@@ -710,40 +753,49 @@ export default function App() {
                 </button>
               </div>
 
-              <nav className="space-y-1.5 overflow-y-auto max-h-[calc(100vh-220px)] pr-1">
-                {navigationItems.map((item) => {
-                  const isAllowed = item.frentistaAllowed || !isFrentista;
-                  const IconComponent = item.icon;
+              <nav className="space-y-4">
+                {navigationSections.map((sec, secIdx) => (
+                  <div key={secIdx} className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 block">
+                      {sec.title}
+                    </span>
+                    <div className="space-y-0.5">
+                      {sec.items.map((item) => {
+                        const isAllowed = item.frentistaAllowed || !isFrentista;
+                        const IconComponent = item.icon;
 
-                  return (
-                    <button
-                      key={item.id}
-                      disabled={!isAllowed}
-                      onClick={() => {
-                        setActiveTab(item.id);
-                        setSidebarOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                        activeTab === item.id
-                          ? "bg-[#00B880] text-white"
-                          : isAllowed
-                          ? "text-slate-300 hover:bg-slate-800/60 hover:text-white"
-                          : "text-slate-600 cursor-not-allowed"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <IconComponent className="h-4 w-4" />
-                        <span>{item.name}</span>
-                      </div>
-                      {!isAllowed && <Lock className="h-3.5 w-3.5 text-slate-600" />}
-                    </button>
-                  );
-                })}
+                        return (
+                          <button
+                            key={item.id}
+                            disabled={!isAllowed}
+                            onClick={() => {
+                              setActiveTab(item.id);
+                              setSidebarOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              activeTab === item.id
+                                ? "bg-[#10B981] text-white"
+                                : isAllowed
+                                ? "text-slate-300 hover:bg-slate-800/60 hover:text-white"
+                                : "text-slate-600 cursor-not-allowed"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <IconComponent className="h-4 w-4" />
+                              <span>{item.name}</span>
+                            </div>
+                            {!isAllowed && <Lock className="h-3.5 w-3.5 text-slate-600" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </nav>
             </div>
 
-            <div className="pt-4 border-t border-slate-800 space-y-3">
-              <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2.5 text-xs">
+            <div className="pt-3 border-t border-slate-800 space-y-2 shrink-0">
+              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex items-center gap-2.5 text-xs">
                 <UserAvatar user={currentUser} size="sm" />
                 <div className="truncate min-w-0">
                   <p className="font-bold text-white truncate">{currentUser.nomeCompleto}</p>
@@ -751,21 +803,23 @@ export default function App() {
                 </div>
               </div>
 
-              <button
-                onClick={handleInstallPWA}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-[#00B880]/20 border border-[#00B880]/40 text-[#00B880] font-bold text-xs rounded-xl cursor-pointer"
-              >
-                <Smartphone className="h-4 w-4" />
-                Instalar App (PWA)
-              </button>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={handleInstallPWA}
+                  className="flex items-center justify-center gap-1.5 py-2 px-2 bg-[#10B981]/20 border border-[#10B981]/40 text-[#10B981] font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  <Smartphone className="h-4 w-4" />
+                  PWA
+                </button>
 
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-rose-950/20 border border-rose-900/50 text-rose-300 font-bold text-xs rounded-xl cursor-pointer"
-              >
-                <LogOut className="h-4 w-4" />
-                Sair
-              </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center justify-center gap-1.5 py-2 px-2 bg-rose-950/20 border border-rose-900/50 text-rose-300 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sair
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1195,6 +1249,14 @@ export default function App() {
           onClose={() => setShowOnboarding(false)}
         />
       )}
+
+      {/* 5. PWA INSTALLATION MODAL & GUIDANCE */}
+      <PWAModal
+        isOpen={isPwaModalOpen}
+        onClose={() => setIsPwaModalOpen(false)}
+        deferredPrompt={deferredPrompt}
+        onInstall={handleInstallPWA}
+      />
     </div>
   );
 }

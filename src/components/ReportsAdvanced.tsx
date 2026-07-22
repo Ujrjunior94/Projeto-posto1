@@ -6,13 +6,15 @@
 import React, { useState } from "react";
 import { AppState, FuelTank } from "../types";
 import { FileText, Calendar, TrendingUp, DollarSign, Download, Printer, AlertTriangle, CheckSquare, Sparkles } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface ReportsAdvancedProps {
   appState: AppState;
 }
 
 export default function ReportsAdvanced({ appState }: ReportsAdvancedProps) {
-  const { tanks, shifts, transactions, calibrations, qualityAudits } = appState;
+  const { tanks = [], shifts = [], transactions = [], calibrations = [], qualityAudits = [] } = appState;
 
   // Custom range states
   const [startDate, setStartDate] = useState(
@@ -268,6 +270,253 @@ export default function ReportsAdvanced({ appState }: ReportsAdvancedProps) {
     printWindow.document.close();
   };
 
+  const downloadReportsPDF = () => {
+    try {
+      const doc = new jsPDF("p", "mm", "a4");
+      const periodText = `${startDate.split("-").reverse().join("/")} a ${endDate.split("-").reverse().join("/")}`;
+      const emissionDate = new Date().toLocaleString("pt-BR");
+      const stationCnpj = appState.users[0]?.cnpjPosto || "12.345.678/0001-99";
+      const stationName = appState.nomePosto || "MEU POSTO ERP";
+
+      const startX = 12;
+      const endX = 198;
+      const usableWidth = 186;
+
+      // Header
+      doc.setDrawColor(16, 185, 129);
+      doc.setLineWidth(1);
+      doc.line(startX, 15, endX, 15);
+
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text(stationName.toUpperCase(), startX, 22);
+
+      doc.setTextColor(75, 85, 99);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`RELATÓRIO FINANCEIRO & ANALÍTICO - CNPJ: ${stationCnpj}`, startX, 27);
+
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Período: ${periodText}`, endX, 22, { align: "right" });
+      doc.text(`Emissão: ${emissionDate}`, endX, 26, { align: "right" });
+
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.5);
+      doc.line(startX, 31, endX, 31);
+
+      // KPI Summary Box in PDF
+      const cardW = usableWidth / 3;
+      const cardH = 16;
+      const cardY = 35;
+
+      // Card 1: Faturamento
+      doc.setFillColor(240, 253, 244);
+      doc.setDrawColor(187, 247, 208);
+      doc.rect(startX, cardY, cardW - 2, cardH, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(22, 101, 52);
+      doc.text("FATURAMENTO TOTAL", startX + (cardW - 2) / 2, cardY + 5, { align: "center" });
+      doc.setFontSize(9.5);
+      doc.setTextColor(22, 163, 74);
+      doc.text(`R$ ${totalRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, startX + (cardW - 2) / 2, cardY + 12, { align: "center" });
+
+      // Card 2: Despesas
+      const card2X = startX + cardW;
+      doc.setFillColor(254, 242, 242);
+      doc.setDrawColor(254, 202, 202);
+      doc.rect(card2X, cardY, cardW - 2, cardH, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(153, 27, 27);
+      doc.text("DESPESAS OPERACIONAIS", card2X + (cardW - 2) / 2, cardY + 5, { align: "center" });
+      doc.setFontSize(9.5);
+      doc.setTextColor(220, 38, 38);
+      doc.text(`R$ ${totalExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, card2X + (cardW - 2) / 2, cardY + 12, { align: "center" });
+
+      // Card 3: Lucro Líquido
+      const card3X = card2X + cardW;
+      doc.setFillColor(239, 246, 255);
+      doc.setDrawColor(191, 219, 254);
+      doc.rect(card3X, cardY, cardW - 2, cardH, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(30, 64, 175);
+      doc.text("RESULTADO LÍQUIDO", card3X + (cardW - 2) / 2, cardY + 5, { align: "center" });
+      doc.setFontSize(9.5);
+      if (netProfit >= 0) doc.setTextColor(22, 163, 74);
+      else doc.setTextColor(220, 38, 38);
+      doc.text(`R$ ${netProfit.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, card3X + (cardW - 2) / 2, cardY + 12, { align: "center" });
+
+      let currentY = 57;
+
+      // Table 1: Receitas por Categoria
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text("1. DISTRIBUIÇÃO DAS RECEITAS POR CATEGORIA", startX, currentY);
+      currentY += 3;
+
+      const categoryRows = [
+        [
+          "Combustíveis (Bicos & Pista)",
+          `${totalRevenue > 0 ? Math.round((fuelSalesRevenue / totalRevenue) * 100) : 0}%`,
+          `R$ ${fuelSalesRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+        ],
+        [
+          "Loja de Conveniência Integrada",
+          `${totalRevenue > 0 ? Math.round((convenienceSalesRevenue / totalRevenue) * 100) : 0}%`,
+          `R$ ${convenienceSalesRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+        ],
+        [
+          "Serviços (Troca de Óleo / Ducha)",
+          `${totalRevenue > 0 ? Math.round((servicesSalesRevenue / totalRevenue) * 100) : 0}%`,
+          `R$ ${servicesSalesRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+        ]
+      ];
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Categoria de Receita", "Participação (%)", "Faturamento Bruto (R$)"]],
+        body: categoryRows,
+        theme: "grid",
+        margin: { left: startX, right: 12 },
+        headStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: "bold",
+        },
+        columnStyles: {
+          0: { halign: "left", fontStyle: "bold" },
+          1: { halign: "center" },
+          2: { halign: "right", fontStyle: "bold" },
+        },
+        styles: { fontSize: 8, cellPadding: 3, lineColor: [226, 232, 240] },
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+
+      // Table 2: Estoque Crítico de Tanques
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text("2. ESTADO DO ESTOQUE DE TANQUES (NÍVEIS CRÍTICOS)", startX, currentY);
+      currentY += 3;
+
+      const tankRows = tanks.map((t) => [
+        t.identificador,
+        t.combustivel,
+        `${(t.capacidadeMaxima || 0).toLocaleString("pt-BR")} L`,
+        `${(t.volumeAtual || 0).toLocaleString("pt-BR")} L`,
+        `${(t.pontoCriticoAlerta || 0).toLocaleString("pt-BR")} L`,
+        t.volumeAtual <= t.pontoCriticoAlerta ? "ALERTA CRÍTICO" : "NORMAL"
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Tanque", "Combustível", "Capacidade", "Volume Atual", "Ponto Crítico", "Status"]],
+        body: tankRows,
+        theme: "grid",
+        margin: { left: startX, right: 12 },
+        headStyles: {
+          fillColor: [30, 58, 138],
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: "bold",
+        },
+        columnStyles: {
+          0: { halign: "left", fontStyle: "bold" },
+          1: { halign: "left" },
+          2: { halign: "right" },
+          3: { halign: "right", fontStyle: "bold" },
+          4: { halign: "right" },
+          5: { halign: "center", fontStyle: "bold" },
+        },
+        styles: { fontSize: 7.5, cellPadding: 2.5, lineColor: [226, 232, 240] },
+        didParseCell: function (data: any) {
+          if (data.row.section === "body" && data.column.index === 5) {
+            if (data.cell.text[0] === "ALERTA CRÍTICO") {
+              data.cell.styles.textColor = [220, 38, 38];
+              data.cell.styles.fillColor = [254, 242, 242];
+            } else {
+              data.cell.styles.textColor = [22, 163, 74];
+            }
+          }
+        }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+
+      // Table 3: Transações Recentes
+      if (currentY > 220) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text("3. LANÇAMENTOS DO FLUXO DE CAIXA NO PERÍODO", startX, currentY);
+      currentY += 3;
+
+      const txRows = filteredTxs.slice(-25).reverse().map((tx) => [
+        tx.data ? tx.data.substring(0, 10).split("-").reverse().join("/") : "-",
+        tx.descricao,
+        tx.categoria,
+        tx.tipo,
+        `R$ ${tx.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Data", "Descrição", "Categoria", "Tipo", "Valor (R$)"]],
+        body: txRows.length > 0 ? txRows : [["-", "Nenhuma transação registrada no período", "-", "-", "R$ 0,00"]],
+        theme: "grid",
+        margin: { left: startX, right: 12 },
+        headStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: "bold",
+        },
+        columnStyles: {
+          0: { halign: "center" },
+          1: { halign: "left" },
+          2: { halign: "left" },
+          3: { halign: "center", fontStyle: "bold" },
+          4: { halign: "right", fontStyle: "bold" },
+        },
+        styles: { fontSize: 7.5, cellPadding: 2.5, lineColor: [226, 232, 240] },
+        didParseCell: function (data: any) {
+          if (data.row.section === "body" && data.column.index === 3) {
+            if (data.cell.text[0] === "Receita") {
+              data.cell.styles.textColor = [22, 163, 74];
+            } else if (data.cell.text[0] === "Despesa") {
+              data.cell.styles.textColor = [220, 38, 38];
+            }
+          }
+        }
+      });
+
+      // Footer with page numbering
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7.5);
+        doc.setTextColor(150);
+        doc.text(`Página ${i} de ${totalPages}`, endX, 285, { align: "right" });
+        doc.text(`Gerado por Meu Posto ERP - ${emissionDate}`, startX, 285);
+      }
+
+      doc.save(`Relatorio_Gerencial_MeuPosto_${startDate}_${endDate}.pdf`);
+    } catch (err: any) {
+      alert("Erro ao gerar PDF do relatório: " + err.message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Date filter top controls */}
@@ -435,24 +684,32 @@ export default function ReportsAdvanced({ appState }: ReportsAdvancedProps) {
 
           <div className="space-y-3 pt-2">
             <button
-              onClick={() => handlePrint("A4")}
-              className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              onClick={downloadReportsPDF}
+              className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-900/20"
             >
               <Download className="h-4 w-4" />
-              Compilar PDF Comercial (A4)
+              Exportar Tabela de Relatório (jsPDF)
+            </button>
+
+            <button
+              onClick={() => handlePrint("A4")}
+              className="w-full py-2.5 px-4 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Printer className="h-4 w-4" />
+              Visualização de Impressão (A4)
             </button>
 
             <button
               onClick={() => handlePrint("80mm")}
-              className="w-full py-3 px-4 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs rounded-lg transition flex items-center justify-center gap-2 font-mono cursor-pointer"
+              className="w-full py-2.5 px-4 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-2 font-mono cursor-pointer"
             >
               <Printer className="h-4 w-4" />
               Imprimir Térmico (80mm)
             </button>
           </div>
 
-          <div className="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-200">
-            <strong>Instruções de Gravação:</strong> No menu de diálogo de impressão que será aberto, selecione a opção <strong>"Salvar como PDF"</strong> no destino da impressora para guardar o arquivo digitalmente.
+          <div className="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <strong>Download Direto:</strong> O botão <strong>"Exportar Tabela de Relatório (jsPDF)"</strong> gera e baixa instantaneamente um arquivo PDF com todas as tabelas e KPIs consolidados.
           </div>
         </div>
       </div>

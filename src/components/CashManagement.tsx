@@ -18,7 +18,11 @@ import {
   ListCollapse,
   Layers,
   Sparkles,
+  PenTool,
+  X,
+  FileCheck2,
 } from "lucide-react";
+import SignaturePad from "./SignaturePad";
 
 interface CashManagementProps {
   appState: AppState;
@@ -35,12 +39,14 @@ export default function CashManagement({
   onUpdateClosings,
   onUpdateReconciliations,
 }: CashManagementProps) {
-  const { nozzles, shifts, nozzleClosings = [] } = appState;
+  const { nozzles = [], shifts = [], nozzleClosings = [] } = appState;
 
   // Selected shift for real-time litrage overview
   const [selectedShiftId, setSelectedShiftId] = useState(shifts[1]?.id || shifts[0]?.id || "");
   const [selectedNozzleId, setSelectedNozzleId] = useState("");
   const [encerranteFinal, setEncerranteFinal] = useState(124650);
+  const [capturedSignature, setCapturedSignature] = useState<string | null>(null);
+  const [previewSignatureModal, setPreviewSignatureModal] = useState<{ open: boolean; url?: string; title?: string }>({ open: false });
 
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
@@ -88,12 +94,15 @@ export default function CashManagement({
       encerranteFinal: Number(encerranteFinal),
       litrosVendidos,
       valorVendidoCalculado,
+      assinaturaDigital: capturedSignature || undefined,
     };
 
     onUpdateClosings([...nozzleClosings, newClosing]);
 
     setSuccess(
-      `Bico fechado com sucesso! Volume registrado: ${litrosVendidos.toLocaleString()} L vendidos.`
+      `Bico fechado com sucesso! Volume registrado: ${litrosVendidos.toLocaleString()} L vendidos.${
+        capturedSignature ? " (Assinatura digital validada)" : ""
+      }`
     );
     setTimeout(() => setSuccess(""), 4000);
   };
@@ -214,10 +223,19 @@ export default function CashManagement({
               )}
             </div>
 
+            {/* Captura de Assinatura Digital do Operador */}
+            <div className="pt-2 border-t border-slate-100">
+              <SignaturePad
+                onSignatureChange={(url) => setCapturedSignature(url)}
+                label="Validação por Assinatura Digital"
+              />
+            </div>
+
             <button
               type="submit"
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition cursor-pointer"
+              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition cursor-pointer shadow-sm flex items-center justify-center gap-2"
             >
+              <FileCheck2 className="h-4 w-4" />
               Registrar Fechamento de Bico
             </button>
           </form>
@@ -279,12 +297,13 @@ export default function CashManagement({
                 <th className="py-2 px-3">Leitura Inicial (L)</th>
                 <th className="py-2 px-3">Leitura Final (L)</th>
                 <th className="py-2 px-3 text-right">Volume Vendido</th>
+                <th className="py-2 px-3 text-center">Assinatura Digital</th>
               </tr>
             </thead>
             <tbody>
               {nozzleClosings.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 italic">
+                  <td colSpan={6} className="py-8 text-center text-slate-400 italic">
                     Nenhum encerramento de bico registrado.
                   </td>
                 </tr>
@@ -313,6 +332,24 @@ export default function CashManagement({
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-indigo-600">
                           {nc.litrosVendidos.toLocaleString()} L
                         </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {nc.assinaturaDigital ? (
+                            <button
+                              onClick={() => setPreviewSignatureModal({
+                                open: true,
+                                url: nc.assinaturaDigital,
+                                title: `Assinatura: ${nozzle ? nozzle.numeroBico : "Bico"} (${shift ? shift.data : ""})`
+                              })}
+                              className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                              title="Clique para ampliar a assinatura"
+                            >
+                              <img src={nc.assinaturaDigital} alt="Assinatura" className="h-4 w-12 object-contain bg-white rounded border border-slate-200" />
+                              <span>Ver</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Pendente</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })
@@ -321,6 +358,47 @@ export default function CashManagement({
           </table>
         </div>
       </div>
+
+      {/* Modal Zoom Preview da Assinatura Digital */}
+      {previewSignatureModal.open && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 border border-slate-200 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-slate-800 font-extrabold text-xs">
+                <PenTool className="h-4 w-4 text-emerald-600" />
+                <span>{previewSignatureModal.title || "Assinatura Digital Validadora"}</span>
+              </div>
+              <button
+                onClick={() => setPreviewSignatureModal({ open: false })}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-center min-h-[140px]">
+              {previewSignatureModal.url ? (
+                <img
+                  src={previewSignatureModal.url}
+                  alt="Assinatura ampliada"
+                  className="max-h-32 object-contain bg-white p-2 rounded-lg border border-slate-200 shadow-xs"
+                />
+              ) : (
+                <span className="text-xs text-slate-400 italic">Assinatura não disponível</span>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setPreviewSignatureModal({ open: false })}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
