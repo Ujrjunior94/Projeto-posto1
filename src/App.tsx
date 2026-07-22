@@ -55,6 +55,9 @@ import {
   ArrowUpRight,
   Wifi,
   WifiOff,
+  Share2,
+  Copy,
+  CheckCircle2,
 } from "lucide-react";
 
 const STORAGE_KEY = "meu_posto_app_state";
@@ -103,6 +106,8 @@ export default function App() {
   const [isInstallable, setIsInstallable] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
 
   // Auto-trigger onboarding for new users if not completed
   useEffect(() => {
@@ -824,6 +829,19 @@ export default function App() {
               )}
             </button>
 
+            {/* Compartilhar Link Button */}
+            <button
+              onClick={() => {
+                setCopiedShareLink(false);
+                setIsShareModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-xs rounded-full transition shadow-2xs cursor-pointer"
+              title="Compartilhar link de acesso do posto"
+            >
+              <Share2 className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="hidden sm:inline">Compartilhar</span>
+            </button>
+
             {/* Guide/Onboarding Helper button */}
             <button
               onClick={() => setShowOnboarding(true)}
@@ -1078,6 +1096,94 @@ export default function App() {
           );
         })}
       </div>
+
+      {/* 3.F MODAL COMPARTILHAR LINK DO POSTO */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-2xl">
+                  <Share2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-800 text-base">Compartilhar Acesso do Posto</h3>
+                  <p className="text-xs text-slate-500 font-medium">Link para funcionários e gerentes</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Posto Ativo</span>
+                <p className="text-sm font-black text-slate-800">{appState.nomePosto || "Meu Posto"}</p>
+                <p className="text-xs text-slate-500 font-mono">CNPJ: {currentUser.cnpjPosto}</p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Link Direto da Aplicação
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={window.location.href}
+                    className="flex-1 bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 outline-none select-all"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      setCopiedShareLink(true);
+                      setTimeout(() => setCopiedShareLink(false), 2500);
+                      handleAddAuditLog("SHARE", "Sistema", "Copiou link de compartilhamento do posto", "Regular");
+                    }}
+                    className="px-4 py-2 bg-[#00B880] hover:bg-[#05C480] text-white font-bold text-xs rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {copiedShareLink ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" /> Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4" /> Copiar
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    const text = `Acesse o sistema do ${appState.nomePosto || "Posto"} (CNPJ: ${currentUser.cnpjPosto}):\n${window.location.href}`;
+                    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+                    window.open(whatsappUrl, "_blank");
+                  }}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <Share2 className="h-4 w-4" /> Compartilhar via WhatsApp
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 text-center">
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="text-xs font-bold text-slate-500 hover:text-slate-800 transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. ONBOARDING WELCOME WIZARD MODAL */}
       {showOnboarding && currentUser && (

@@ -328,6 +328,77 @@ export default function ShiftsChecklists({
     }
   };
 
+  const handleLoadSampleSchedule = () => {
+    setIsImporting(true);
+    onAddAuditLog("IMPORT", "Escala", "Iniciou teste com modelo de amostra de escala por foto", "Regular");
+
+    setTimeout(() => {
+      const samplePreviewUrl = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'><rect width='600' height='400' fill='%231e293b'/><text x='300' y='50' fill='%2338bdf8' font-family='sans-serif' font-size='20' font-weight='bold' text-anchor='middle'>ESCALA DE PLANTÃO - AUTO POSTO ESTRELA</text><text x='300' y='80' fill='%2394a3b8' font-family='sans-serif' font-size='14' text-anchor='middle'>Julho / 2026</text><line x1='40' y1='100' x2='560' y2='100' stroke='%23334155' stroke-width='2'/><text x='60' y='140' fill='%23f8fafc' font-family='sans-serif' font-size='14'>• Carlos Santos — Manhã (06h - 14h)</text><text x='60' y='180' fill='%23f8fafc' font-family='sans-serif' font-size='14'>• Marcos Oliveira — Tarde (14h - 22h)</text><text x='60' y='220' fill='%23f8fafc' font-family='sans-serif' font-size='14'>• Renata Lima — Noite (22h - 06h)</text><text x='60' y='260' fill='%23f8fafc' font-family='sans-serif' font-size='14'>• Bruno Souza — Horista (10h - 18h)</text><rect x='40' y='300' width='520' height='60' rx='10' fill='%230f172a' stroke='%2338bdf8'/><text x='300' y='335' fill='%2338bdf8' font-family='sans-serif' font-size='13' font-weight='bold' text-anchor='middle'>Exemplo Processado via Inteligência Artificial Gemini 3.6</text></svg>";
+
+      const sampleUsers: AIRecognizedUserItem[] = [
+        {
+          id: "u_sample_1",
+          nomeCompleto: "Carlos Santos",
+          cargo: "Frentista",
+          email: "carlossantos@posto.com",
+          telefone: "(11) 98888-1111",
+          isExisting: users.some((u) => u.nomeCompleto.toLowerCase() === "carlos santos"),
+          selected: true,
+        },
+        {
+          id: "u_sample_2",
+          nomeCompleto: "Marcos Oliveira",
+          cargo: "Frentista",
+          email: "marcosoliveira@posto.com",
+          telefone: "(11) 97777-2222",
+          isExisting: users.some((u) => u.nomeCompleto.toLowerCase() === "marcos oliveira"),
+          selected: true,
+        },
+        {
+          id: "u_sample_3",
+          nomeCompleto: "Renata Lima",
+          cargo: "Gerente",
+          email: "renatalima@posto.com",
+          telefone: "(11) 96666-3333",
+          isExisting: users.some((u) => u.nomeCompleto.toLowerCase() === "renata lima"),
+          selected: true,
+        },
+        {
+          id: "u_sample_4",
+          nomeCompleto: "Bruno Souza",
+          cargo: "Frentista",
+          email: "brunosouza@posto.com",
+          telefone: "(11) 95555-4444",
+          isExisting: users.some((u) => u.nomeCompleto.toLowerCase() === "bruno souza"),
+          selected: true,
+        },
+      ];
+
+      const sampleSchedules = [
+        { data: "Dia 01", turno: "Manhã (06h - 14h)", frentistaResponsavel: "Carlos Santos" },
+        { data: "Dia 01", turno: "Tarde (14h - 22h)", frentistaResponsavel: "Marcos Oliveira" },
+        { data: "Dia 01", turno: "Noite (22h - 06h)", frentistaResponsavel: "Renata Lima" },
+        { data: "Dia 02", turno: "Manhã (06h - 14h)", frentistaResponsavel: "Bruno Souza" },
+        { data: "Dia 02", turno: "Tarde (14h - 22h)", frentistaResponsavel: "Carlos Santos" },
+        { data: "Dia 03", turno: "Noite (22h - 06h)", frentistaResponsavel: "Marcos Oliveira" },
+      ];
+
+      const sampleEvents = [
+        { data: "Dia 05", titulo: "Treinamento de Segurança da Pista", tipo: "Treinamento", horario: "10:00", descricao: "Treinamento NR-20 obrigatório" },
+      ];
+
+      setAiImportModalData({
+        imagePreview: samplePreviewUrl,
+        recognizedUsers: sampleUsers,
+        schedules: sampleSchedules,
+        events: sampleEvents,
+      });
+
+      setIsImporting(false);
+      onAddAuditLog("IMPORT", "Escala", "Amostra de teste de escala por foto carregada com sucesso", "Regular");
+    }, 600);
+  };
+
   const handleConfirmAiImportModal = () => {
     if (!aiImportModalData) return;
 
@@ -1502,13 +1573,46 @@ export default function ShiftsChecklists({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-start md:self-auto">
+            <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={isImporting}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition text-xs flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50"
+                title="Tirar foto da escala impressa em papel"
+              >
+                {isImporting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">Tirar Foto</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isImporting}
+                className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold rounded-xl transition text-xs flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50"
+                title="Enviar imagem da escala da galeria"
+              >
+                {isImporting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
+                <span>Enviar Foto (IA)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLoadSampleSchedule}
+                disabled={isImporting}
+                className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl transition text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Testar fluxo da IA com amostra de exemplo"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                <span className="hidden lg:inline">Testar Amostra</span>
+              </button>
+
               <button
                 onClick={() => setIsExportModalOpen(true)}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition text-xs flex items-center gap-1.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition text-xs flex items-center gap-1.5 shadow-md hover:shadow-lg cursor-pointer"
               >
                 <Download className="h-3.5 w-3.5" />
-                Exportar Escala
+                <span className="hidden sm:inline">Exportar Escala</span>
               </button>
 
               <div className="flex gap-1">
