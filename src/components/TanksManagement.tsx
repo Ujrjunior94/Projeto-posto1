@@ -24,7 +24,7 @@ export const FUEL_TYPES: FuelType[] = [
 ];
 
 export default function TanksManagement({ appState, userRole, onUpdateTanks }: TanksManagementProps) {
-  const { tanks } = appState;
+  const { tanks = [] } = appState;
   const isReadOnly = userRole === "Frentista";
 
   const [activeSubTab, setActiveSubTab] = useState<"tanques" | "regua" | "tudo">("regua");

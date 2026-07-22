@@ -460,7 +460,7 @@ export default function App() {
     localStorage.setItem("meu_posto_logged_user", JSON.stringify(updatedUser));
 
     setAppState((prev) => {
-      const updatedUsers = prev.users.map((u) => (u.id === updatedUser.id ? updatedUser : u));
+      const updatedUsers = (prev.users || []).map((u) => (u.id === updatedUser.id ? updatedUser : u));
       return { ...prev, users: updatedUsers };
     });
   };
@@ -497,7 +497,7 @@ export default function App() {
     setAppState((prev) => {
       const oldCnpj = currentUser?.cnpjPosto || "12.345.678/0001-99";
       
-      const updatedUsers = prev.users.map((u) => {
+      const updatedUsers = (prev.users || []).map((u) => {
         if (u.cnpjPosto === oldCnpj) {
           return { ...u, cnpjPosto };
         }
@@ -510,14 +510,14 @@ export default function App() {
         localStorage.setItem("meu_posto_logged_user", JSON.stringify(updatedCurrentUser));
       }
 
-      const updatedShifts = prev.shifts.map(s => s.stationCnpj === oldCnpj ? { ...s, stationCnpj: cnpjPosto } : s);
-      const updatedLmc = prev.lmc.map(r => r.stationCnpj === oldCnpj ? { ...r, stationCnpj: cnpjPosto } : r);
-      const updatedAppointments = prev.appointments.map(a => a.stationCnpj === oldCnpj ? { ...a, stationCnpj: cnpjPosto } : a);
-      const updatedCredentials = prev.systemCredentials.map(c => c.stationCnpj === oldCnpj ? { ...c, stationCnpj: cnpjPosto } : c);
-      const updatedDeliveries = prev.deliveries.map(d => d.stationCnpj === oldCnpj ? { ...d, stationCnpj: cnpjPosto } : d);
-      const updatedAudits = prev.audits.map(a => a.stationCnpj === oldCnpj ? { ...a, stationCnpj: cnpjPosto } : a);
-      const updatedLubricants = prev.lubricantDeliveries.map(d => d.stationCnpj === oldCnpj ? { ...d, stationCnpj: cnpjPosto } : d);
-      const updatedBalances = prev.dailyBalances.map(b => b.stationCnpj === oldCnpj ? { ...b, stationCnpj: cnpjPosto } : b);
+      const updatedShifts = (prev.shifts || []).map(s => s.stationCnpj === oldCnpj ? { ...s, stationCnpj: cnpjPosto } : s);
+      const updatedLmc = (prev.lmc || []).map(r => r.stationCnpj === oldCnpj ? { ...r, stationCnpj: cnpjPosto } : r);
+      const updatedAppointments = (prev.appointments || []).map(a => a.stationCnpj === oldCnpj ? { ...a, stationCnpj: cnpjPosto } : a);
+      const updatedCredentials = (prev.systemCredentials || []).map(c => c.stationCnpj === oldCnpj ? { ...c, stationCnpj: cnpjPosto } : c);
+      const updatedDeliveries = (prev.deliveries || []).map(d => d.stationCnpj === oldCnpj ? { ...d, stationCnpj: cnpjPosto } : d);
+      const updatedAudits = (prev.audits || []).map(a => a.stationCnpj === oldCnpj ? { ...a, stationCnpj: cnpjPosto } : a);
+      const updatedLubricants = (prev.lubricantDeliveries || []).map(d => d.stationCnpj === oldCnpj ? { ...d, stationCnpj: cnpjPosto } : d);
+      const updatedBalances = (prev.dailyBalances || []).map(b => b.stationCnpj === oldCnpj ? { ...b, stationCnpj: cnpjPosto } : b);
 
       return {
         ...prev,

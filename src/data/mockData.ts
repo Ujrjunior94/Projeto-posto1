@@ -330,6 +330,18 @@ export const INITIAL_STATE: AppState = {
       conforme: false,
       responsavelTecnico: "Carlos Eduardo Silva",
     },
+    {
+      id: "q3",
+      data: "2026-07-14",
+      combustivel: "Etanol",
+      densidade: 0.809,
+      temperatura: 20.0,
+      teorEtanol: 93.3, // 93.3% M/M (Mass fraction)
+      aspectoVisual: "Límpido e Isento",
+      presencaImpurezas: false,
+      conforme: true,
+      responsavelTecnico: "Roberto Silveira",
+    },
   ],
   lmc: [
     {

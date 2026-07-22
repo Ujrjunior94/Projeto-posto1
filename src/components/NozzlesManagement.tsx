@@ -29,7 +29,7 @@ interface NozzlesManagementProps {
 }
 
 export default function NozzlesManagement({ appState, userRole, onUpdateNozzles, onAddAuditLog }: NozzlesManagementProps) {
-  const { nozzles, tanks } = appState;
+  const { nozzles = [], tanks = [] } = appState;
   const isReadOnly = userRole === "Frentista";
 
   // Selection state
@@ -58,7 +58,7 @@ export default function NozzlesManagement({ appState, userRole, onUpdateNozzles,
   const [error, setError] = useState("");
 
   // Get unique fuel types from tanks
-  const uniqueFuels = Array.from(new Set(tanks.map((t) => t.combustivel)));
+  const uniqueFuels = Array.from(new Set((tanks || []).map((t) => t.combustivel)));
 
   const toggleNozzleSelection = (id: string) => {
     setSelectedNozzleIds(prev => 

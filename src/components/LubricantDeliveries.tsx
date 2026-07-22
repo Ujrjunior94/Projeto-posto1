@@ -97,7 +97,7 @@ export default function LubricantDeliveries({
   const toggleProductConferido = (deliveryId: string, productId: string) => {
     const updated = lubricantDeliveries.map(d => {
       if (d.id === deliveryId) {
-        const updatedProducts = d.produtos.map(p => 
+        const updatedProducts = (d.produtos || []).map(p => 
           p.id === productId ? { ...p, conferido: !p.conferido } : p
         );
         
@@ -389,7 +389,7 @@ export default function LubricantDeliveries({
               </div>
 
               <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {delivery.produtos.map(product => (
+                {(delivery.produtos || []).map(product => (
                   <button
                     key={product.id}
                     disabled={isReadOnly}

@@ -71,10 +71,13 @@ export function checkFuelCompliance(
   if (fuel === "Etanol") {
     densidadeMin = 0.8076;
     densidadeMax = 0.8110;
-    const abv = 96.0 - 264.7 * (d20 - 0.8076);
-    teorCalculadoOuEsperado = Math.min(100, Math.max(0, Number(abv.toFixed(1))));
-    teorMin = 95.1;
-    teorMax = 96.0;
+    // Cálculo do teor alcoólico do etanol em massa (% M/M / °INPM):
+    // D20 = 0.8076 g/cm³ -> 93.8% M/M
+    // D20 = 0.8110 g/cm³ -> 92.5% M/M
+    const massPct = 93.8 - ((d20 - 0.8076) / 0.0034) * 1.3;
+    teorCalculadoOuEsperado = Math.min(100, Math.max(0, Number(massPct.toFixed(1))));
+    teorMin = 92.5;
+    teorMax = 93.8;
     teorOk = teorCalculadoOuEsperado >= teorMin && teorCalculadoOuEsperado <= teorMax;
   } else if (fuel === "Gasolina Comum" || fuel === "Gasolina Aditivada") {
     densidadeMin = 0.7150;
@@ -115,7 +118,7 @@ export function checkFuelCompliance(
     if (!densidadeOk) motivos.push(`Massa específica D20 (${d20.toFixed(4)} g/cm³) fora da faixa ANP 2026 (${densidadeMin.toFixed(4)} - ${densidadeMax.toFixed(4)} g/cm³)`);
     if (!teorOk) {
       if (fuel === "Etanol") {
-        motivos.push(`Teor Alcoólico (${teorCalculadoOuEsperado.toFixed(1)}% v/v) fora do permitido (95.1% - 96.0%)`);
+        motivos.push(`Teor Alcoólico em Massa (${teorCalculadoOuEsperado.toFixed(1)}% M/M) fora do permitido (92.5% - 93.8% M/M)`);
       } else if (fuel.includes("Gasolina")) {
         motivos.push(`Teor de Etanol Anidro (${teorCalculadoOuEsperado.toFixed(1)}%) fora do limite regulamentar (${teorMin.toFixed(1)}% - ${teorMax.toFixed(1)}%)`);
       } else if (fuel.includes("Diesel")) {
@@ -964,11 +967,11 @@ export default function ANPQualityControl({
                     <div className="pt-2 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-[11px] leading-tight">
                       <div>
                         <span className="text-slate-400 text-[9px] uppercase font-bold block">
-                          {qCombustivel === "Etanol" ? "Teor Alcoólico" : qCombustivel.includes("Gasolina") ? "Teor de Etanol" : "Biodiesel/Aditivo"}
+                          {qCombustivel === "Etanol" ? "Teor Alcoólico em Massa" : qCombustivel.includes("Gasolina") ? "Teor de Etanol" : "Biodiesel/Aditivo"}
                         </span>
                         <span className={`font-mono font-black ${comp.teorOk ? "text-emerald-600" : "text-rose-600"}`}>
                           {qCombustivel === "Etanol" 
-                            ? `${comp.teorCalculadoOuEsperado.toFixed(1)}% v/v`
+                            ? `${comp.teorCalculadoOuEsperado.toFixed(1)}% M/M`
                             : qCombustivel.includes("Gasolina")
                               ? `${comp.teorCalculadoOuEsperado.toFixed(1)}% v/v`
                               : "Isento / Conforme"
@@ -976,12 +979,12 @@ export default function ANPQualityControl({
                         </span>
                         {qCombustivel.includes("Gasolina") && (
                           <span className="text-[9px] text-slate-400 block mt-0.5">
-                            Faixa legal: 26% a 28%
+                            Faixa legal: 26% a 30% v/v
                           </span>
                         )}
                         {qCombustivel === "Etanol" && (
                           <span className="text-[9px] text-slate-400 block mt-0.5">
-                            Faixa legal: 95.1% a 96.0%
+                            Faixa legal em massa: 92,5% a 93,8% M/M
                           </span>
                         )}
                       </div>
@@ -1112,7 +1115,7 @@ export default function ANPQualityControl({
                             </div>
                           </td>
                           <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                            {audit.combustivel.includes("Gasolina") ? `${audit.teorEtanol}%` : audit.combustivel === "Etanol" ? `${audit.teorEtanol}% v/v` : "—"}
+                            {audit.combustivel.includes("Gasolina") ? `${audit.teorEtanol}% v/v` : audit.combustivel === "Etanol" ? `${audit.teorEtanol}% M/M` : "—"}
                           </td>
                           <td className="py-2.5 px-3">
                             <span

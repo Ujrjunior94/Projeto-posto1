@@ -3972,10 +3972,10 @@ export default function ShiftsChecklists({
               {editingShift.occurrences && editingShift.occurrences.length > 0 && (
                 <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-3 space-y-2">
                   <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider block">
-                    Ocorrências da Sessão ({editingShift.occurrences.length})
+                    Ocorrências da Sessão ({(editingShift.occurrences || []).length})
                   </span>
                   <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
-                    {editingShift.occurrences.map((o) => (
+                    {(editingShift.occurrences || []).map((o) => (
                       <div key={o.id} className="bg-white p-2 rounded-xl border border-rose-200 flex justify-between items-center text-xs">
                         <div>
                           <span className="font-bold text-rose-700">{o.tipo}:</span> {o.descricao}
