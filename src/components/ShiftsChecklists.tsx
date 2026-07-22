@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { AppState, ShiftSchedule, User } from "../types";
+import { AppState, ShiftSchedule, User, UserRole } from "../types";
 import { UserAvatar, PRESET_AVATAR_ICONS } from "./UserAvatar";
 import {
   ClipboardList,
@@ -65,6 +65,23 @@ const SHIFT_TYPES = [
 
 const weekdayHeaders = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+export interface AIRecognizedUserItem {
+  id: string;
+  nomeCompleto: string;
+  cargo: UserRole;
+  email: string;
+  telefone: string;
+  isExisting: boolean;
+  selected: boolean;
+}
+
+export interface AIRecognizedModalData {
+  imagePreview: string;
+  recognizedUsers: AIRecognizedUserItem[];
+  schedules: any[];
+  events: any[];
+}
+
 export default function ShiftsChecklists({
   appState,
   userRole,
@@ -74,6 +91,9 @@ export default function ShiftsChecklists({
   onAddAuditLog,
 }: ShiftsChecklistsProps) {
   const { shifts = [], users = [] } = appState;
+
+  // AI Recognition modal state
+  const [aiImportModalData, setAiImportModalData] = useState<AIRecognizedModalData | null>(null);
 
   // Master Authority logic for Managers & Masters
   const isMasterOrGerente = userRole === "Master" || userRole === "Gerente" || userRole === "Supervisor" || userRole === "Gerente Geral" || userRole === "Administrador";
@@ -222,16 +242,34 @@ export default function ShiftsChecklists({
           }
 
           const data = await response.json();
+          const imagePreviewUrl = reader.result as string;
 
-          // 1. Incorporate recognized employees into the users list
-          const newUsers = [...users];
-          let usersAdded = 0;
+          // 1. Process recognized employees
+          const recognizedMap = new Map<string, { cargo: UserRole; telefone: string }>();
 
-          const recognizedEmployees = new Set<string>();
+          if (data.employeeDetails && Array.isArray(data.employeeDetails)) {
+            data.employeeDetails.forEach((ed: any) => {
+              if (ed.name && typeof ed.name === "string" && ed.name.trim() && ed.name.toLowerCase() !== "evento geral") {
+                const nameKey = ed.name.trim();
+                let cargo: UserRole = "Frentista";
+                if (ed.cargo && (ed.cargo === "Gerente" || ed.cargo === "Supervisor" || ed.cargo === "Master")) {
+                  cargo = ed.cargo;
+                }
+                recognizedMap.set(nameKey, {
+                  cargo,
+                  telefone: ed.telefone || "(11) 99999-0000",
+                });
+              }
+            });
+          }
+
           if (data.employees && Array.isArray(data.employees)) {
             data.employees.forEach((empName: string) => {
               if (empName && typeof empName === "string" && empName.trim() && empName.toLowerCase() !== "evento geral") {
-                recognizedEmployees.add(empName.trim());
+                const nameKey = empName.trim();
+                if (!recognizedMap.has(nameKey)) {
+                  recognizedMap.set(nameKey, { cargo: "Frentista", telefone: "(11) 99999-0000" });
+                }
               }
             });
           }
@@ -239,135 +277,43 @@ export default function ShiftsChecklists({
           if (data.schedules && Array.isArray(data.schedules)) {
             data.schedules.forEach((s: any) => {
               if (s.frentistaResponsavel && typeof s.frentistaResponsavel === "string" && s.frentistaResponsavel.trim() && s.frentistaResponsavel.toLowerCase() !== "evento geral") {
-                recognizedEmployees.add(s.frentistaResponsavel.trim());
+                const nameKey = s.frentistaResponsavel.trim();
+                if (!recognizedMap.has(nameKey)) {
+                  recognizedMap.set(nameKey, { cargo: "Frentista", telefone: "(11) 99999-0000" });
+                }
               }
             });
           }
 
-          recognizedEmployees.forEach((empName: string) => {
-            const exists = newUsers.some((u) => u.nomeCompleto.toLowerCase() === empName.toLowerCase() && (!u.cnpjPosto || u.cnpjPosto === cnpjPosto));
-            if (!exists) {
-              const newFrentista: User = {
-                id: "u_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
-                nomeCompleto: empName,
-                email: empName.toLowerCase().replace(/\s+/g, "") + "@posto.com",
-                senhaCriptografada: "frentista123",
-                cpf: "000.000.000-00",
-                cargo: "Frentista",
-                cnpjPosto,
-                telefone: "(11) 99999-0000",
-                avatarIcon: "⛽",
-              };
-              newUsers.push(newFrentista);
-              usersAdded++;
-            }
+          const recognizedUserList: AIRecognizedUserItem[] = [];
+          recognizedMap.forEach((details, empName) => {
+            const existingUser = users.find(
+              (u) => u.nomeCompleto.toLowerCase() === empName.toLowerCase() && (!u.cnpjPosto || u.cnpjPosto === cnpjPosto)
+            );
+            const isExisting = Boolean(existingUser);
+            const cleanEmail = empName.toLowerCase().replace(/\s+/g, "") + "@posto.com";
+
+            recognizedUserList.push({
+              id: existingUser ? existingUser.id : "u_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+              nomeCompleto: empName,
+              cargo: existingUser ? existingUser.cargo : details.cargo,
+              email: existingUser ? existingUser.email : cleanEmail,
+              telefone: existingUser ? existingUser.telefone : details.telefone,
+              isExisting,
+              selected: true,
+            });
           });
 
-          if (usersAdded > 0) {
-            onUpdateUsers(newUsers);
-          }
-
-          // Helper to extract clean "Dia XX" and YYYY-MM-DD
-          const extractDayInfo = (dataStr: string) => {
-            if (!dataStr) return { dayOfWeek: "Dia 01", fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-01` };
-            if (dataStr.startsWith("Dia ")) {
-              const dNum = parseInt(dataStr.replace("Dia ", ""), 10) || 1;
-              const padded = String(dNum).padStart(2, "0");
-              return {
-                dayOfWeek: `Dia ${padded}`,
-                fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${padded}`,
-              };
-            }
-            const digits = dataStr.replace(/\D/g, "");
-            let dNum = 1;
-            if (dataStr.includes("-")) {
-              const parts = dataStr.split("-");
-              dNum = parseInt(parts[parts.length - 1], 10) || 1;
-            } else if (digits) {
-              dNum = parseInt(digits, 10) || 1;
-            }
-            if (dNum < 1 || dNum > 31) dNum = 1;
-            const padded = String(dNum).padStart(2, "0");
-            return {
-              dayOfWeek: `Dia ${padded}`,
-              fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${padded}`,
-            };
-          };
-
-          // 2. Merge recognized data into existing shifts
-          const newShifts = [...shifts];
-          let schedulesAdded = 0;
-          let eventsAdded = 0;
-
-          if (data.schedules && Array.isArray(data.schedules) && data.schedules.length > 0) {
-            data.schedules.forEach((s: any) => {
-              if (!s.frentistaResponsavel) return;
-              const dayInfo = extractDayInfo(s.data);
-              const shiftId = "s_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-
-              let finalTurno = s.turno || "Manhã (06h - 14h)";
-              const lowerT = String(finalTurno).toLowerCase();
-              if (lowerT.includes("manhã") || lowerT === "t2" || lowerT === "m") finalTurno = "Manhã (06h - 14h)";
-              else if (lowerT.includes("tarde") || lowerT === "t3" || lowerT === "t") finalTurno = "Tarde (14h - 22h)";
-              else if (lowerT.includes("noite") || lowerT === "t4" || lowerT === "n") finalTurno = "Noite (22h - 06h)";
-              else if (lowerT.includes("folga") || lowerT.includes("repouso") || lowerT === "f") finalTurno = "Folga Geral";
-              else if (lowerT.includes("horista 2") || lowerT === "h2") finalTurno = "Horista 2 (09h - 18h)";
-              else if (lowerT.includes("horista") || lowerT === "hr") finalTurno = "Horista (10h - 18h)";
-
-              newShifts.push({
-                id: shiftId,
-                data: dayInfo.fullDate,
-                turno: finalTurno as any,
-                frentistaResponsavel: s.frentistaResponsavel,
-                checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
-                status: "Planejado",
-                stationCnpj: cnpjPosto,
-                dayOfWeek: dayInfo.dayOfWeek,
-              });
-              schedulesAdded++;
-            });
-          }
-
-          if (data.events && Array.isArray(data.events) && data.events.length > 0) {
-            data.events.forEach((evt: any) => {
-              const dayInfo = extractDayInfo(evt.data);
-              const eventId = "evt_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-              const newEvent = {
-                id: eventId,
-                titulo: evt.titulo || "Evento",
-                tipo: evt.tipo || "Outro",
-                descricao: evt.descricao || "",
-                horario: evt.horario || "09:00",
-              };
-
-              const existingShift = newShifts.find(
-                (s) => (!s.stationCnpj || s.stationCnpj === cnpjPosto) && s.dayOfWeek === dayInfo.dayOfWeek && s.frentistaResponsavel === "Evento Geral"
-              );
-              if (existingShift) {
-                existingShift.events = [...(existingShift.events || []), newEvent];
-              } else {
-                newShifts.push({
-                  id: "s_evt_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
-                  data: dayInfo.fullDate,
-                  turno: "Evento Geral",
-                  frentistaResponsavel: "Evento Geral",
-                  checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
-                  status: "Planejado",
-                  stationCnpj: cnpjPosto,
-                  dayOfWeek: dayInfo.dayOfWeek,
-                  events: [newEvent],
-                });
-              }
-              eventsAdded++;
-            });
-          }
-
-          onUpdateShifts(newShifts);
-          onAddAuditLog("IMPORT", "Escala", `Importação com IA concluída: ${usersAdded} frentistas, ${schedulesAdded} turnos e ${eventsAdded} eventos`, "Regular");
-          alert(`Escala de plantão importada com sucesso via IA!\n\n• ${usersAdded} novos frentistas adicionados à equipe\n• ${schedulesAdded} plantões alocados no planner\n• ${eventsAdded} eventos/reuniões agendados`);
+          setAiImportModalData({
+            imagePreview: imagePreviewUrl,
+            recognizedUsers: recognizedUserList,
+            schedules: data.schedules || [],
+            events: data.events || [],
+          });
+          onAddAuditLog("IMPORT", "Escala", `IA analisou imagem e reconheceu ${recognizedUserList.length} funcionários`, "Regular");
         } catch (err: any) {
           console.error(err);
-          alert(`Erro ao importar escala com IA: ${err.message || "Verifique se a foto é legível."}`);
+          alert(`Erro ao reconhecer funcionários na escala: ${err.message || "Verifique se a foto está legível."}`);
         } finally {
           setIsImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = "";
@@ -380,6 +326,143 @@ export default function ShiftsChecklists({
       alert("Erro ao ler o arquivo de imagem.");
       setIsImporting(false);
     }
+  };
+
+  const handleConfirmAiImportModal = () => {
+    if (!aiImportModalData) return;
+
+    const { recognizedUsers, schedules, events } = aiImportModalData;
+
+    // 1. Process selected users to create pre-registrations
+    const updatedUsersList = [...users];
+    let usersCreatedCount = 0;
+
+    recognizedUsers.forEach((rec) => {
+      if (!rec.selected) return;
+      const exists = updatedUsersList.some(
+        (u) => u.nomeCompleto.toLowerCase() === rec.nomeCompleto.toLowerCase() && (!u.cnpjPosto || u.cnpjPosto === cnpjPosto)
+      );
+
+      if (!exists) {
+        const newUser: User = {
+          id: rec.id || "u_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+          nomeCompleto: rec.nomeCompleto,
+          email: rec.email || rec.nomeCompleto.toLowerCase().replace(/\s+/g, "") + "@posto.com",
+          senhaCriptografada: "frentista123",
+          cpf: "000.000.000-00",
+          cargo: rec.cargo || "Frentista",
+          cnpjPosto,
+          telefone: rec.telefone || "(11) 99999-0000",
+          avatarIcon: "⛽",
+        };
+        updatedUsersList.push(newUser);
+        usersCreatedCount++;
+      }
+    });
+
+    if (usersCreatedCount > 0) {
+      onUpdateUsers(updatedUsersList);
+    }
+
+    // 2. Helper to extract day info
+    const extractDayInfo = (dataStr: string) => {
+      if (!dataStr) return { dayOfWeek: "Dia 01", fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-01` };
+      if (dataStr.startsWith("Dia ")) {
+        const dNum = parseInt(dataStr.replace("Dia ", ""), 10) || 1;
+        const padded = String(dNum).padStart(2, "0");
+        return {
+          dayOfWeek: `Dia ${padded}`,
+          fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${padded}`,
+        };
+      }
+      const digits = dataStr.replace(/\D/g, "");
+      let dNum = 1;
+      if (dataStr.includes("-")) {
+        const parts = dataStr.split("-");
+        dNum = parseInt(parts[parts.length - 1], 10) || 1;
+      } else if (digits) {
+        dNum = parseInt(digits, 10) || 1;
+      }
+      if (dNum < 1 || dNum > 31) dNum = 1;
+      const padded = String(dNum).padStart(2, "0");
+      return {
+        dayOfWeek: `Dia ${padded}`,
+        fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${padded}`,
+      };
+    };
+
+    // 3. Process schedules and events
+    const newShifts = [...shifts];
+    let schedulesAdded = 0;
+    let eventsAdded = 0;
+
+    if (schedules && Array.isArray(schedules)) {
+      schedules.forEach((s: any) => {
+        if (!s.frentistaResponsavel) return;
+        const dayInfo = extractDayInfo(s.data);
+        const shiftId = "s_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+
+        let finalTurno = s.turno || "Manhã (06h - 14h)";
+        const lowerT = String(finalTurno).toLowerCase();
+        if (lowerT.includes("manhã") || lowerT === "t2" || lowerT === "m") finalTurno = "Manhã (06h - 14h)";
+        else if (lowerT.includes("tarde") || lowerT === "t3" || lowerT === "t") finalTurno = "Tarde (14h - 22h)";
+        else if (lowerT.includes("noite") || lowerT === "t4" || lowerT === "n") finalTurno = "Noite (22h - 06h)";
+        else if (lowerT.includes("folga") || lowerT.includes("repouso") || lowerT === "f") finalTurno = "Folga Geral";
+        else if (lowerT.includes("horista 2") || lowerT === "h2") finalTurno = "Horista 2 (09h - 18h)";
+        else if (lowerT.includes("horista") || lowerT === "hr") finalTurno = "Horista (10h - 18h)";
+
+        newShifts.push({
+          id: shiftId,
+          data: dayInfo.fullDate,
+          turno: finalTurno as any,
+          frentistaResponsavel: s.frentistaResponsavel,
+          checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+          status: "Planejado",
+          stationCnpj: cnpjPosto,
+          dayOfWeek: dayInfo.dayOfWeek,
+        });
+        schedulesAdded++;
+      });
+    }
+
+    if (events && Array.isArray(events)) {
+      events.forEach((evt: any) => {
+        const dayInfo = extractDayInfo(evt.data);
+        const eventId = "evt_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+        const newEvent = {
+          id: eventId,
+          titulo: evt.titulo || "Evento",
+          tipo: evt.tipo || "Outro",
+          descricao: evt.descricao || "",
+          horario: evt.horario || "09:00",
+        };
+
+        const existingShift = newShifts.find(
+          (s) => (!s.stationCnpj || s.stationCnpj === cnpjPosto) && s.dayOfWeek === dayInfo.dayOfWeek && s.frentistaResponsavel === "Evento Geral"
+        );
+        if (existingShift) {
+          existingShift.events = [...(existingShift.events || []), newEvent];
+        } else {
+          newShifts.push({
+            id: "s_evt_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+            data: dayInfo.fullDate,
+            turno: "Evento Geral",
+            frentistaResponsavel: "Evento Geral",
+            checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+            status: "Planejado",
+            stationCnpj: cnpjPosto,
+            dayOfWeek: dayInfo.dayOfWeek,
+            events: [newEvent],
+          });
+        }
+        eventsAdded++;
+      });
+    }
+
+    onUpdateShifts(newShifts);
+    onAddAuditLog("IMPORT", "Escala", `Confirmou reconhecimento por IA: ${usersCreatedCount} novos cadastros prévios, ${schedulesAdded} plantões e ${eventsAdded} eventos`, "Regular");
+    alert(`Sincronização e cadastro prévio concluídos!\n\n• ${usersCreatedCount} novos funcionários cadastrados previamente\n• ${schedulesAdded} plantões alocados\n• ${eventsAdded} eventos/reuniões criados`);
+    setAiImportModalData(null);
   };
 
   const [showAddEventForm, setShowAddEventForm] = useState(false);
@@ -3836,6 +3919,204 @@ export default function ShiftsChecklists({
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Reconhecimento por IA e Cadastro Prévio de Funcionários */}
+      {aiImportModalData && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 px-6 py-4 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/10 rounded-2xl backdrop-blur-sm">
+                  <Sparkles className="h-6 w-6 text-amber-300 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black tracking-tight">
+                    Reconhecimento de Funcionários & Cadastro Prévio
+                  </h3>
+                  <p className="text-xs text-indigo-100 font-medium">
+                    A IA leu a foto da escala e identificou a equipe e os plantões.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiImportModalData(null)}
+                className="p-1.5 hover:bg-white/10 rounded-xl text-indigo-100 hover:text-white transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+              
+              {/* Left Column: Image & Overview */}
+              <div className="md:col-span-5 space-y-4">
+                <div className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-700 shadow-inner relative group">
+                  <img
+                    src={aiImportModalData.imagePreview}
+                    alt="Foto da Escala"
+                    className="w-full h-56 object-cover object-center group-hover:scale-105 transition duration-300"
+                  />
+                  <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur-sm px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-200">
+                    Foto da Escala Digitalizada
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-indigo-900 font-extrabold text-xs">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600" /> Resumo do Reconhecimento
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white p-2.5 rounded-xl border border-indigo-100/60 shadow-sm">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Plantões</span>
+                      <span className="text-lg font-black text-indigo-700">{aiImportModalData.schedules.length}</span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-indigo-100/60 shadow-sm">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Eventos</span>
+                      <span className="text-lg font-black text-purple-700">{aiImportModalData.events.length}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Recognized Employees Pre-Registration List */}
+              <div className="md:col-span-7 space-y-4 flex flex-col">
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
+                    <span>Funcionários Reconhecidos ({aiImportModalData.recognizedUsers.length})</span>
+                    <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                      Cadastros Prévios
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Marque os nomes para confirmar o cadastro prévio no sistema ou editar cargo e telefone.
+                  </p>
+                </div>
+
+                <div className="space-y-3 max-h-80 overflow-y-auto pr-1 flex-1">
+                  {aiImportModalData.recognizedUsers.map((userItem, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-2xl border transition ${
+                        userItem.selected
+                          ? userItem.isExisting
+                            ? "bg-slate-50 border-slate-200"
+                            : "bg-emerald-50/60 border-emerald-200 shadow-sm"
+                          : "bg-slate-50/50 border-slate-200 opacity-60"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={userItem.selected}
+                          onChange={(e) => {
+                            const updated = [...aiImportModalData.recognizedUsers];
+                            updated[idx].selected = e.target.checked;
+                            setAiImportModalData({ ...aiImportModalData, recognizedUsers: updated });
+                          }}
+                          className="mt-1.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                        />
+
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">⛽</span>
+                              <input
+                                type="text"
+                                value={userItem.nomeCompleto}
+                                onChange={(e) => {
+                                  const updated = [...aiImportModalData.recognizedUsers];
+                                  updated[idx].nomeCompleto = e.target.value;
+                                  setAiImportModalData({ ...aiImportModalData, recognizedUsers: updated });
+                                }}
+                                className="font-bold text-xs text-slate-800 bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 outline-none px-1"
+                              />
+                            </div>
+
+                            {userItem.isExisting ? (
+                              <span className="text-[10px] font-extrabold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full">
+                                Já Cadastrado
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                ✨ Novo Cadastro Prévio
+                              </span>
+                            )}
+                          </div>
+
+                          {!userItem.isExisting && (
+                            <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-400 uppercase">Cargo</label>
+                                <select
+                                  value={userItem.cargo}
+                                  onChange={(e) => {
+                                    const updated = [...aiImportModalData.recognizedUsers];
+                                    updated[idx].cargo = e.target.value as UserRole;
+                                    setAiImportModalData({ ...aiImportModalData, recognizedUsers: updated });
+                                  }}
+                                  className="w-full bg-white border border-slate-200 rounded-lg p-1 text-xs text-slate-700 font-medium"
+                                >
+                                  <option value="Frentista">Frentista</option>
+                                  <option value="Gerente">Gerente</option>
+                                  <option value="Supervisor">Supervisor</option>
+                                  <option value="Gerente Geral">Gerente Geral</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-400 uppercase">Telefone</label>
+                                <input
+                                  type="text"
+                                  value={userItem.telefone}
+                                  onChange={(e) => {
+                                    const updated = [...aiImportModalData.recognizedUsers];
+                                    updated[idx].telefone = e.target.value;
+                                    setAiImportModalData({ ...aiImportModalData, recognizedUsers: updated });
+                                  }}
+                                  className="w-full bg-white border border-slate-200 rounded-lg p-1 text-xs text-slate-700 font-medium"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center shrink-0">
+              <span className="text-xs text-slate-500 font-medium">
+                {aiImportModalData.recognizedUsers.filter((u) => u.selected && !u.isExisting).length} novos cadastros selecionados
+              </span>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAiImportModalData(null)}
+                  className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmAiImportModal}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle2 className="h-4 w-4" /> Confirmar Cadastros & Salvar Escala
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

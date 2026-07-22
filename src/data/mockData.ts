@@ -40,6 +40,17 @@ export const INITIAL_STATE: AppState = {
       telefone: "(11) 95555-4444",
       avatarIcon: "⛽",
     },
+    {
+      id: "u4",
+      nomeCompleto: "Roberto Alves de Oliveira",
+      email: "roberto@meuposto.com",
+      senhaCriptografada: "roberto123",
+      cpf: "222.333.444-55",
+      cargo: "Frentista",
+      cnpjPosto: "12.345.678/0001-99",
+      telefone: "(11) 97777-8888",
+      avatarIcon: "👨‍🔧",
+    },
   ],
   tanks: [
     {

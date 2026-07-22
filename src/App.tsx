@@ -23,6 +23,7 @@ import DailyBalance from "./components/DailyBalance";
 import SupplyRequests from "./components/SupplyRequests";
 import TimesheetManagement from "./components/TimesheetManagement";
 import { UserAvatar } from "./components/UserAvatar";
+import WelcomeOnboarding from "./components/WelcomeOnboarding";
 
 import {
   LayoutDashboard,
@@ -52,6 +53,8 @@ import {
   Calendar,
   Sparkles,
   ArrowUpRight,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 const STORAGE_KEY = "meu_posto_app_state";
@@ -98,6 +101,50 @@ export default function App() {
   const [loadingState, setLoadingState] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Auto-trigger onboarding for new users if not completed
+  useEffect(() => {
+    if (currentUser) {
+      const completed = localStorage.getItem(`meu_posto_onboarding_completed_${currentUser.id}`);
+      if (!completed) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [currentUser]);
+
+  // Monitor network connectivity for continuous online sync
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (currentUser) {
+        const rawCnpj = currentUser.cnpjPosto || "12.345.678/0001-99";
+        const cleanCnpj = rawCnpj.replace(/\D/g, "") || "12345678000199";
+        const docRef = doc(db, "postos", cleanCnpj);
+        setDoc(docRef, appState).then(() => {
+          const nowIso = new Date().toISOString();
+          setSyncConfig((prev) => ({
+            ...prev,
+            lastCloudSyncDate: nowIso,
+            lastBackupDate: nowIso,
+          }));
+        }).catch((err) => console.error("Erro na ressincronização ao voltar online:", err));
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [appState, currentUser]);
   const [showPwaBanner, setShowPwaBanner] = useState(true);
 
   useEffect(() => {
@@ -203,11 +250,22 @@ export default function App() {
           if (!docSnap.metadata.hasPendingWrites) {
             const cloudData = docSnap.data() as AppState;
             setAppState(cloudData);
+            const nowIso = new Date().toISOString();
+            setSyncConfig((prev) => ({
+              ...prev,
+              lastCloudSyncDate: nowIso,
+            }));
           }
         } else {
           // Create initial document in Firestore
           try {
             await setDoc(docRef, appState);
+            const nowIso = new Date().toISOString();
+            setSyncConfig((prev) => ({
+              ...prev,
+              lastCloudSyncDate: nowIso,
+              lastBackupDate: nowIso,
+            }));
           } catch (err) {
             console.error("Erro ao inicializar documento do posto no Firestore:", err);
           }
@@ -234,6 +292,12 @@ export default function App() {
       try {
         const docRef = doc(db, "postos", cleanCnpj);
         await setDoc(docRef, appState);
+        const nowIso = new Date().toISOString();
+        setSyncConfig((prev) => ({
+          ...prev,
+          lastCloudSyncDate: nowIso,
+          lastBackupDate: nowIso,
+        }));
       } catch (err) {
         console.error("Erro ao salvar dados no Firestore:", err);
       }
@@ -241,7 +305,7 @@ export default function App() {
 
     const timer = setTimeout(() => {
       saveToFirestore();
-    }, 1200);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [appState, currentUser?.cnpjPosto]);
@@ -726,6 +790,50 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Real-time Continuous Online Sync Badge */}
+            <button
+              onClick={() => setActiveTab("sincronizacao")}
+              className={`px-3 py-1.5 rounded-full text-xs font-mono font-bold border transition flex items-center gap-2 cursor-pointer shadow-2xs ${
+                isOnline
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                  : "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100"
+              }`}
+              title="Status da Sincronização Contínua em Tempo Real no Banco de Dados"
+            >
+              <span className="relative flex h-2 w-2">
+                {isOnline ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </>
+                ) : (
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                )}
+              </span>
+              {isOnline ? (
+                <span className="flex items-center gap-1">
+                  <Wifi className="h-3.5 w-3.5 text-emerald-600 hidden sm:inline" />
+                  <span className="hidden md:inline">SINCRONIA CONTINUA 24/7</span>
+                  <span className="md:hidden">ONLINE</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <WifiOff className="h-3.5 w-3.5 text-rose-600 hidden sm:inline" />
+                  <span>OFFLINE</span>
+                </span>
+              )}
+            </button>
+
+            {/* Guide/Onboarding Helper button */}
+            <button
+              onClick={() => setShowOnboarding(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs rounded-full transition shadow-2xs cursor-pointer"
+              title="Acessar o assistente de introdução"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600 animate-pulse" />
+              <span className="hidden md:inline">Guia Inicial</span>
+            </button>
+
             {/* Pill/Badge de Data Monospaçada */}
             <div className="bg-white border border-slate-200/80 px-3.5 py-1.5 rounded-full text-xs font-mono text-[#0F172A] font-bold shadow-2xs flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5 text-[#00B880]" />
@@ -970,6 +1078,17 @@ export default function App() {
           );
         })}
       </div>
+
+      {/* 4. ONBOARDING WELCOME WIZARD MODAL */}
+      {showOnboarding && currentUser && (
+        <WelcomeOnboarding
+          currentUser={currentUser}
+          appState={appState}
+          onUpdateStationDetails={handleUpdateStationDetails}
+          onAddAuditLog={handleAddAuditLog}
+          onClose={() => setShowOnboarding(false)}
+        />
+      )}
     </div>
   );
 }

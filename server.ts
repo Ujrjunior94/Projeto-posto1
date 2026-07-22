@@ -71,7 +71,7 @@ export async function createExpressApp() {
 
       const prompt = `Analise a imagem da escala de trabalho ou escala de plantão de um posto de combustíveis.
       Sua tarefa é ler a imagem e extrair três tipos de informações estruturadas:
-      1. Lista única de funcionários (employees): Todos os nomes de pessoas físicas identificadas na imagem (frentistas, gerentes, supervisores, lavadores).
+      1. Lista única de nomes de funcionários (employees) e detalhes estruturados (employeeDetails): Todos os nomes de pessoas físicas identificadas na imagem (frentistas, gerentes, supervisores, lavadores, operadores) e o cargo inferido (Frentista, Gerente, Supervisor).
       2. Turnos de trabalho (schedules): Mapeamento de datas para turnos de trabalho e o nome do funcionário responsável.
       3. Eventos (events): Reuniões, manutenções, auditorias ou treinamentos com data, título, tipo e horário.
 
@@ -90,6 +90,9 @@ export async function createExpressApp() {
       Retorne APENAS um JSON seguindo exatamente este esquema:
       {
         "employees": ["Nome Completo 1", "Nome Completo 2"],
+        "employeeDetails": [
+          { "name": "Nome Completo 1", "cargo": "Frentista", "telefone": "(11) 99999-0000" }
+        ],
         "schedules": [
           { "data": "2026-07-01", "turno": "Manhã (06h - 14h)", "frentistaResponsavel": "Nome do Funcionário" }
         ],
@@ -114,6 +117,18 @@ export async function createExpressApp() {
               employees: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING }
+              },
+              employeeDetails: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    cargo: { type: Type.STRING },
+                    telefone: { type: Type.STRING }
+                  },
+                  required: ["name"]
+                }
               },
               schedules: {
                 type: Type.ARRAY,

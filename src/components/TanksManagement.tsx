@@ -5,7 +5,8 @@
 
 import React, { useState } from "react";
 import { AppState, FuelTank, FuelType } from "../types";
-import { Plus, Trash2, Fuel, ShieldAlert, CheckCircle, Edit, Save, X } from "lucide-react";
+import { Plus, Trash2, Fuel, ShieldAlert, CheckCircle, Edit, Save, X, Ruler, Table, TrendingUp } from "lucide-react";
+import DipstickTankCalculator from "./DipstickTankCalculator";
 
 interface TanksManagementProps {
   appState: AppState;
@@ -25,6 +26,8 @@ export const FUEL_TYPES: FuelType[] = [
 export default function TanksManagement({ appState, userRole, onUpdateTanks }: TanksManagementProps) {
   const { tanks } = appState;
   const isReadOnly = userRole === "Frentista";
+
+  const [activeSubTab, setActiveSubTab] = useState<"tanques" | "regua" | "tudo">("regua");
 
   // Create form state
   const [identificador, setIdentificador] = useState("");
@@ -167,15 +170,57 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center pb-4 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-200">
         <div>
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
             <Fuel className="text-indigo-600 h-6 w-6" />
             Controle de Estoque e Tanques
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Gestão dos tanques de armazenamento, controle de litragem e níveis de segurança crítica
+            Gestão de tanques, tabelas de régua de medição (TRN) e previsão para descarga de caminhão-tanque
           </p>
+        </div>
+
+        {/* Sub-tab Navigation */}
+        <div className="bg-slate-100 p-1 rounded-2xl border border-slate-200 flex gap-1 self-stretch sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("regua")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === "regua"
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Ruler className="h-4 w-4 text-indigo-600" />
+            Tabelas de Régua & Previsão
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("tanques")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === "tanques"
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Fuel className="h-4 w-4 text-indigo-600" />
+            Tanques do Posto ({tanks.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("tudo")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === "tudo"
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Table className="h-4 w-4 text-indigo-600" />
+            Tudo
+          </button>
         </div>
       </div>
 
@@ -193,10 +238,17 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Register Tank form (Only for Master/Gerente/Supervisor) */}
-        {!isReadOnly ? (
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
+      {/* Render Dipstick Tank Calculator Component */}
+      {(activeSubTab === "regua" || activeSubTab === "tudo") && (
+        <DipstickTankCalculator appState={appState} onUpdateTanks={onUpdateTanks} />
+      )}
+
+      {/* Render Registered Tanks Grid & Add Form */}
+      {(activeSubTab === "tanques" || activeSubTab === "tudo") && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+          {/* Register Tank form (Only for Master/Gerente/Supervisor) */}
+          {!isReadOnly ? (
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-fit">
             <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
               <Plus className="text-indigo-600 h-4 w-4" />
               Cadastrar Novo Tanque
@@ -600,6 +652,7 @@ export default function TanksManagement({ appState, userRole, onUpdateTanks }: T
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
