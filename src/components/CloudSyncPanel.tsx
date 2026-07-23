@@ -70,7 +70,7 @@ export interface SyncRecordItem {
   isSynced: boolean;
 }
 
-function parseDateToMillis(dateStr?: string, defaultTs: number = Date.now()): number {
+function parseDateToMillis(dateStr?: string, defaultTs: number = 0): number {
   if (!dateStr) return defaultTs;
   try {
     const formatted = dateStr.includes(" ") ? dateStr.replace(" ", "T") : dateStr;
@@ -254,10 +254,12 @@ export function buildSyncRecordList(appState: AppState, lastCloudSyncDate?: stri
 
   // 11. Credenciais
   (appState.systemCredentials || []).forEach((sc) => {
-    let ts = Date.now();
-    if (sc.id && sc.id.startsWith("cred_")) {
+    let ts = 0;
+    if ((sc as any).createdAt) {
+      ts = parseDateToMillis((sc as any).createdAt, 0);
+    } else if (sc.id && sc.id.startsWith("cred_")) {
       const parsedId = parseInt(sc.id.replace("cred_", ""), 10);
-      if (!isNaN(parsedId)) ts = parsedId;
+      if (!isNaN(parsedId) && parsedId > 1000000000) ts = parsedId;
     }
     list.push({
       id: sc.id || `sc_${Math.random()}`,
@@ -265,7 +267,7 @@ export function buildSyncRecordList(appState: AppState, lastCloudSyncDate?: stri
       moduleKey: "credentials",
       title: `Credencial TI: ${sc.systemName}`,
       detail: `Categoria: ${sc.category} | Login: ${sc.login}`,
-      dateStr: "Configuração TI",
+      dateStr: (sc as any).createdAt ? (sc as any).createdAt.split("T")[0] : "Configuração TI",
       timestamp: ts,
       responsible: "TI Posto",
       isSynced: checkSynced(ts),
