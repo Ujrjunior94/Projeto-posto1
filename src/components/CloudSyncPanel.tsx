@@ -83,7 +83,7 @@ function parseDateToMillis(dateStr?: string, defaultTs: number = 0): number {
 }
 
 export function buildSyncRecordList(appState: AppState, lastCloudSyncDate?: string): SyncRecordItem[] {
-  const syncTime = lastCloudSyncDate ? new Date(lastCloudSyncDate).getTime() : 0;
+  const syncTime = lastCloudSyncDate ? new Date(lastCloudSyncDate).getTime() : Date.now();
   const list: SyncRecordItem[] = [];
 
   const checkSynced = (ts: number) => {
@@ -275,6 +275,21 @@ export function buildSyncRecordList(appState: AppState, lastCloudSyncDate?: stri
   });
 
   // 12. LMC & Balanços
+  (appState.lmc || []).forEach((lmcItem) => {
+    const ts = parseDateToMillis(lmcItem.date);
+    list.push({
+      id: lmcItem.id || `lmc_${Math.random()}`,
+      module: "LMC & Balanços",
+      moduleKey: "lmc",
+      title: `LMC: ${lmcItem.fuelType}`,
+      detail: `Data: ${lmcItem.date || "--"} | Vendas: ${lmcItem.litersSold || 0}L`,
+      dateStr: lmcItem.date || "--",
+      timestamp: ts,
+      responsible: "Gerência",
+      isSynced: checkSynced(ts),
+    });
+  });
+
   (appState.dailyBalances || []).forEach((dbItem) => {
     const ts = parseDateToMillis(dbItem.data);
     list.push({

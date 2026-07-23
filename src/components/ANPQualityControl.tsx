@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { AppState, NozzleCalibration, ANPQualityAudit, FuelType, FuelDelivery } from "../types";
+import { AppState, NozzleCalibration, ANPQualityAudit, FuelType, FuelDelivery, ShiftOccurrence, ShiftSchedule, FuelTank } from "../types";
 import {
   Thermometer,
   ShieldAlert,
@@ -18,6 +18,7 @@ import {
   FileText,
   AlertTriangle,
   FileDown,
+  Lock,
 } from "lucide-react";
 import { FUEL_TYPES } from "./TanksManagement";
 import { jsPDF } from "jspdf";
@@ -115,7 +116,7 @@ export function checkFuelCompliance(
 
   if (!conforme) {
     const motivos: string[] = [];
-    if (!densidadeOk) motivos.push(`Massa específica D20 (${d20.toFixed(4)} g/cm³) fora da faixa ANP 2026 (${densidadeMin.toFixed(4)} - ${densidadeMax.toFixed(4)} g/cm³)`);
+    if (!densidadeOk) motivos.push(`Massa específica D20 (${d20.toFixed(4)} g/cm³) fora da faixa ANP (${densidadeMin.toFixed(4)} - ${densidadeMax.toFixed(4)} g/cm³)`);
     if (!teorOk) {
       if (fuel === "Etanol") {
         motivos.push(`Teor Alcoólico em Massa (${teorCalculadoOuEsperado.toFixed(1)}% M/M) fora do permitido (92.5% - 93.8% M/M)`);
@@ -156,6 +157,8 @@ interface ANPQualityControlProps {
   onUpdateQualityAudits: (audits: ANPQualityAudit[]) => void;
   onUpdateDeliveries: (deliveries: FuelDelivery[]) => void;
   onAddAuditLog: (actionType: string, target: string, details: string, status: string) => void;
+  onUpdateShifts?: (shifts: ShiftSchedule[]) => void;
+  onUpdateTanks?: (tanks: FuelTank[]) => void;
 }
 
 export default function ANPQualityControl({
@@ -166,6 +169,8 @@ export default function ANPQualityControl({
   onUpdateQualityAudits,
   onUpdateDeliveries,
   onAddAuditLog,
+  onUpdateShifts,
+  onUpdateTanks,
 }: ANPQualityControlProps) {
   const { calibrations = [], qualityAudits = [], nozzles = [], deliveries = [] } = appState;
   const fuelDeliveries = deliveries;
@@ -277,20 +282,75 @@ export default function ANPQualityControl({
     };
 
     onUpdateQualityAudits([...qualityAudits, newAudit]);
-    onAddAuditLog(
-      "CREATE",
-      "Qualidade",
-      `Emitiu laudo químico ANP 2026 para ${qCombustivel}. D20: ${comp.densidadeCorrigida} g/cm³. Status: ${comp.conforme ? "CONFORME" : "REPROVADO"}`,
-      "Regular"
-    );
 
     if (comp.conforme) {
+      onAddAuditLog(
+        "CREATE",
+        "Qualidade",
+        `Emitiu laudo químico ANP para ${qCombustivel}. D20: ${comp.densidadeCorrigida} g/cm³. Status: CONFORME`,
+        "Regular"
+      );
       setSuccess(
-        `Laudo ANP 2026 gerado: CONFORME! Massa específica corrigida a 20°C: ${comp.densidadeCorrigida.toFixed(4)} g/cm³ (faixa ideal: ${comp.densidadeMin.toFixed(4)} - ${comp.densidadeMax.toFixed(4)}).`
+        `Laudo ANP gerado: CONFORME! Massa específica corrigida a 20°C: ${comp.densidadeCorrigida.toFixed(4)} g/cm³ (${qCombustivel === "Etanol" ? `Teor Alcoólico: ${comp.teorCalculadoOuEsperado.toFixed(1)}% M/M` : `Teor: ${comp.teorCalculadoOuEsperado.toFixed(1)}%`}).`
       );
     } else {
+      // 1. Bloquear automaticamente o(s) tanque(s) do combustível correspondente
+      const affectedTanks = (appState.tanks || []).filter(
+        (t) => t.combustivel === qCombustivel
+      );
+
+      let tankNamesStr = "";
+      if (affectedTanks.length > 0 && onUpdateTanks) {
+        tankNamesStr = affectedTanks.map((t) => t.identificador).join(", ");
+        const updatedTanks = appState.tanks.map((t) => {
+          if (t.combustivel === qCombustivel) {
+            return {
+              ...t,
+              observacoes: `[🚨 TANQUE BLOQUEADO POR QUALIDADE ANP - ${new Date().toLocaleDateString("pt-BR")}] Reprovado no teste de conformidade. Motivo: ${comp.mensagem}`,
+            };
+          }
+          return t;
+        });
+        onUpdateTanks(updatedTanks);
+      }
+
+      // 2. Disparar ocorrência bloqueante automática no sistema de turnos/escalas
+      const todayStr = new Date().toISOString().split("T")[0];
+      const nowTimeStr = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      const occMsg = `🚨 OCORRÊNCIA BLOQUEANTE (QUALIDADE ANP): O combustível ${qCombustivel} foi REPROVADO no teste de conformidade. ${comp.mensagem}. O(s) Tanque(s) de ${qCombustivel} (${tankNamesStr || "Não especificado"}) foi(ram) BLOQUEADO(S) para operação e abastecimento até drenagem e laudo conforme.`;
+
+      if (onUpdateShifts && appState.shifts && appState.shifts.length > 0) {
+        const newOcc: ShiftOccurrence = {
+          id: "oco_block_anp_" + Date.now(),
+          tipo: "Problema na Pista",
+          descricao: occMsg,
+          dataHora: `${todayStr} ${nowTimeStr}`,
+        };
+
+        const activeShiftIndex = appState.shifts.findIndex((s) => s.status === "Em Andamento");
+        const targetIndex = activeShiftIndex !== -1 ? activeShiftIndex : appState.shifts.length - 1;
+
+        const updatedShifts = appState.shifts.map((s, idx) => {
+          if (idx === targetIndex) {
+            return {
+              ...s,
+              occurrences: [...(s.occurrences || []), newOcc],
+            };
+          }
+          return s;
+        });
+        onUpdateShifts(updatedShifts);
+      }
+
+      onAddAuditLog(
+        "CREATE",
+        "Qualidade",
+        `ALERTA DE REPROVAÇÃO ANP: ${qCombustivel} reprovado. ${comp.mensagem}. Ocorrência Bloqueante e Bloqueio de Tanque executados automaticamente.`,
+        "Bloqueio ANP"
+      );
+
       setError(
-        `ALERTA DE REPROVAÇÃO ANP: ${comp.mensagem}`
+        `🚨 ALERTA CRÍTICO ANP: Combustível REPROVADO! ${comp.mensagem}. OCORRÊNCIA BLOQUEANTE registrada automaticamente na escala e Tanque(s) de ${qCombustivel} (${tankNamesStr || "Geral"}) BLOQUEADO(S).`
       );
     }
   };
@@ -824,11 +884,17 @@ export default function ANPQualityControl({
 
             <form onSubmit={handleCreateQualityAudit} className="space-y-4 pt-2">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Combustível *</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Combustível Selecionado *</label>
                 <select
                   value={qCombustivel}
-                  onChange={(e) => setQCombustivel(e.target.value as FuelType)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                  onChange={(e) => {
+                    const newFuel = e.target.value as FuelType;
+                    setQCombustivel(newFuel);
+                    if (newFuel === "Etanol") setQDensidade(0.809);
+                    else if (newFuel.includes("Gasolina")) setQDensidade(newFuel === "Gasolina Premium" ? 0.780 : 0.742);
+                    else if (newFuel.includes("Diesel")) setQDensidade(0.835);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
                 >
                   {FUEL_TYPES.map((f) => (
                     <option key={f} value={f}>
@@ -840,40 +906,53 @@ export default function ANPQualityControl({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Densidade (g/cm³)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Densidade Medida (g/cm³)</label>
                   <input
                     type="number"
-                    step="0.001"
+                    step="0.0001"
                     required
                     value={qDensidade}
                     onChange={(e) => setQDensidade(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Temperatura (°C)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Temperatura Medida (°C)</label>
                   <input
                     type="number"
                     step="0.1"
                     required
                     value={qTemperatura}
                     onChange={(e) => setQTemperatura(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-bold"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Teor Etanol (%)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    {qCombustivel === "Etanol" ? "Teor Alcoólico (% M/M)" : "Teor Anidro/Biodiesel (%)"}
+                  </label>
                   <input
                     type="number"
-                    required
-                    disabled={!qCombustivel.includes("Gasolina")}
-                    value={qCombustivel.includes("Gasolina") ? qTeorEtanol : 0}
+                    required={qCombustivel.includes("Gasolina")}
+                    disabled={qCombustivel === "Etanol" || qCombustivel.includes("Diesel")}
+                    value={
+                      qCombustivel === "Etanol"
+                        ? checkFuelCompliance(qCombustivel, Number(qDensidade), Number(qTemperatura), Number(qTeorEtanol), qAspecto, qImpurezas).teorCalculadoOuEsperado
+                        : qCombustivel.includes("Gasolina")
+                          ? qTeorEtanol
+                          : 0
+                    }
                     onChange={(e) => setQTeorEtanol(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono disabled:opacity-40"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-bold disabled:bg-slate-100 disabled:text-slate-500"
                   />
+                  {qCombustivel === "Etanol" && (
+                    <span className="text-[9px] text-indigo-600 font-semibold block mt-0.5">
+                      Calculado via D20 (Norma ANP 92,5% - 93,8% M/M)
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Aspecto Visual</label>
@@ -882,9 +961,9 @@ export default function ANPQualityControl({
                     onChange={(e) => setQAspecto(e.target.value as any)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
                   >
-                    <option value="Límpido e Isento">Límpido/Isento</option>
+                    <option value="Límpido e Isento">Límpido e Isento</option>
                     <option value="Turvo">Turvo</option>
-                    <option value="Com Impurezas">Impurezas</option>
+                    <option value="Com Impurezas">Com Impurezas</option>
                   </select>
                 </div>
               </div>
@@ -902,22 +981,29 @@ export default function ANPQualityControl({
                 
                 return (
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 text-slate-700">
-                    <div className="text-[10px] font-black uppercase text-indigo-800 tracking-wide flex items-center gap-1">
-                      <Thermometer className="h-3.5 w-3.5 text-indigo-600" />
-                      Painel de Conformidade ANP 2026
+                    <div className="text-[10px] font-black uppercase text-indigo-800 tracking-wide flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Thermometer className="h-3.5 w-3.5 text-indigo-600" />
+                        Calculadora de Conformidade ANP
+                      </span>
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase border ${
+                        comp.conforme ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200 animate-pulse"
+                      }`}>
+                        {comp.conforme ? "Aprovado" : "Fora da Norma"}
+                      </span>
                     </div>
 
                     <div className="text-[10px] text-slate-500 bg-white border border-slate-100 p-2 rounded-lg leading-snug font-mono">
-                      Fórmula de Correção à Temperatura de Referência (20°C):
-                      <div className="text-slate-800 font-bold mt-1 text-[11px] text-center">
-                        D20 = Dt + {factor.toFixed(5)} × (t - 20)
+                      Fórmula de Correção D20:
+                      <div className="text-slate-800 font-bold mt-0.5 text-[11px] text-center">
+                        D20 = Dt + {factor.toFixed(5)} × (t - 20) = <span className="text-indigo-700">{comp.densidadeCorrigida.toFixed(4)} g/cm³</span>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 text-xs leading-tight pt-1">
                       <div>
                         <span className="text-slate-400 text-[9px] uppercase font-bold block">D20 Corrigida</span>
-                        <span className="font-mono font-black text-slate-800 text-[13px]">
+                        <span className={`font-mono font-black text-[13px] ${comp.densidadeOk ? "text-slate-800" : "text-rose-600 font-extrabold"}`}>
                           {comp.densidadeCorrigida.toFixed(4)} g/cm³
                         </span>
                         <span className="text-slate-400 text-[9px] block">
@@ -925,9 +1011,9 @@ export default function ANPQualityControl({
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-400 text-[9px] uppercase font-bold block">Limites Permitidos</span>
+                        <span className="text-slate-400 text-[9px] uppercase font-bold block">Faixa ANP Permitida</span>
                         <span className="font-mono font-bold text-slate-600 text-[11px] block mt-0.5">
-                          {comp.densidadeMin.toFixed(4)} a {comp.densidadeMax.toFixed(4)}
+                          {comp.densidadeMin.toFixed(4)} a {comp.densidadeMax.toFixed(4)} g/cm³
                         </span>
                         <span className="text-slate-400 text-[9px] block">
                           ({(comp.densidadeMin * 1000).toFixed(0)} - {(comp.densidadeMax * 1000).toFixed(0)} kg/m³)
@@ -977,21 +1063,21 @@ export default function ANPQualityControl({
                               : "Isento / Conforme"
                           }
                         </span>
-                        {qCombustivel.includes("Gasolina") && (
-                          <span className="text-[9px] text-slate-400 block mt-0.5">
-                            Faixa legal: 26% a 30% v/v
-                          </span>
-                        )}
                         {qCombustivel === "Etanol" && (
                           <span className="text-[9px] text-slate-400 block mt-0.5">
-                            Faixa legal em massa: 92,5% a 93,8% M/M
+                            Norma ANP: 92,5% a 93,8% M/M
+                          </span>
+                        )}
+                        {qCombustivel.includes("Gasolina") && (
+                          <span className="text-[9px] text-slate-400 block mt-0.5">
+                            Norma ANP: 26% a 30% v/v
                           </span>
                         )}
                       </div>
 
                       <div>
-                        <span className="text-slate-400 text-[9px] uppercase font-bold block">Status Real</span>
-                        <span className={`font-black uppercase px-1.5 py-0.5 rounded text-[8.5px] border inline-block mt-1 ${
+                        <span className="text-slate-400 text-[9px] uppercase font-bold block">Resultado Final</span>
+                        <span className={`font-black uppercase px-2 py-0.5 rounded text-[8.5px] border inline-block mt-1 ${
                           comp.conforme
                             ? "bg-emerald-100 text-emerald-800 border-emerald-200"
                             : "bg-rose-100 text-rose-800 border-rose-200 animate-pulse"
@@ -1000,6 +1086,18 @@ export default function ANPQualityControl({
                         </span>
                       </div>
                     </div>
+
+                    {!comp.conforme && (
+                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[10px] font-bold space-y-1 flex items-start gap-2">
+                        <Lock className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+                        <div>
+                          <p className="uppercase font-black text-rose-700">Gatilho de Ocorrência Bloqueante:</p>
+                          <p className="font-medium text-rose-800 leading-snug">
+                            Ao salvar este laudo, o sistema gerará automaticamente uma <strong>Ocorrência Bloqueante</strong> na escala do turno e aplicará <strong>Bloqueio de Operação</strong> para o tanque de {qCombustivel}.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}

@@ -91,11 +91,22 @@ export default function App() {
   // 3. Sync Configuration
   const [syncConfig, setSyncConfig] = useState<SyncConfig>(() => {
     const saved = localStorage.getItem(CONFIG_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed.lastCloudSyncDate) {
+          parsed.lastCloudSyncDate = new Date().toISOString();
+        }
+        return parsed;
+      } catch (e) {
+        console.warn("Erro ao ler syncConfig do localStorage:", e);
+      }
+    }
     return {
       apiUrl: window.location.origin,
       token: "",
       autoSync: true,
+      lastCloudSyncDate: new Date().toISOString(),
     };
   });
 
@@ -1050,6 +1061,8 @@ export default function App() {
               onUpdateQualityAudits={handleUpdateQualityAudits}
               onUpdateDeliveries={handleUpdateDeliveries}
               onAddAuditLog={handleAddAuditLog}
+              onUpdateShifts={handleUpdateShifts}
+              onUpdateTanks={handleUpdateTanks}
             />
           )}
 
