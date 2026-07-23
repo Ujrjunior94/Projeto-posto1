@@ -28,8 +28,11 @@ import {
   AlertTriangle,
   ChevronRight,
   Filter,
-  UserX
+  UserX,
+  BellRing,
+  Bell
 } from "lucide-react";
+import { notifyCashierShortage, getNotificationPermission, requestBrowserNotificationPermission } from "../lib/notifications";
 
 interface CashierShortageProps {
   appState: AppState;
@@ -145,7 +148,16 @@ export default function CashierShortage({
     onUpdateShortages([...shortages, newShortage]);
     onAddAuditLog("CREATE", "Financeiro", `Registrou ${tipo.toLowerCase()} de caixa de R$ ${valorTotal} no dia ${date} (${shiftTurn}). Rateado igualmente em R$ ${rateio.toFixed(2)} para ${selectedEmployees.join(", ")}.`, "Regular");
 
-    setSuccess(`${tipo} de caixa registrada e rateada com sucesso!`);
+    // DISPARAR NOTIFICAÇÃO DO NAVEGADOR
+    notifyCashierShortage({
+      tipo,
+      valorTotal: Number(valorTotal),
+      data: date,
+      shiftTurn,
+      funcionariosEnvolvidos: selectedEmployees
+    });
+
+    setSuccess(`${tipo} de caixa registrada e rateada com sucesso! (Notificação enviada ao navegador)`);
     setTimeout(() => {
       setSuccess("");
       setShowAddForm(false);
@@ -301,15 +313,33 @@ export default function CashierShortage({
           </p>
         </div>
         
-        {!isReadOnly && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center gap-2 px-4.5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-black text-xs uppercase tracking-wider shadow-md cursor-pointer shrink-0"
+            onClick={async () => {
+              const granted = await requestBrowserNotificationPermission();
+              if (granted) {
+                alert("🔔 Notificações ativadas! Você receberá alertas em tempo real sobre Faltas de Caixa no navegador.");
+              } else {
+                alert("⚠️ Permissão de notificação não concedida no navegador.");
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-xl transition text-xs font-bold cursor-pointer shrink-0"
+            title="Ativar Alertas no Navegador"
           >
-            {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {showAddForm ? "Cancelar" : "Lançar Diferença"}
+            <Bell className="h-3.5 w-3.5 text-amber-600" />
+            <span className="hidden sm:inline">Alertas do Navegador</span>
           </button>
-        )}
+
+          {!isReadOnly && (
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="flex items-center gap-2 px-4.5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-black text-xs uppercase tracking-wider shadow-md cursor-pointer shrink-0"
+            >
+              {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {showAddForm ? "Cancelar" : "Lançar Diferença"}
+            </button>
+          )}
+        </div>
       </div>
 
       {success && (

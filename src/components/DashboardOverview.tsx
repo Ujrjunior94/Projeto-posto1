@@ -38,7 +38,11 @@ import {
   Package,
   PlusCircle,
   Zap,
-  BarChart3
+  BarChart3,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  Move
 } from "lucide-react";
 
 interface DashboardOverviewProps {
@@ -93,8 +97,76 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
     }));
   };
 
+  const DEFAULT_CARD_ORDER = ["quickStats", "fuelTanks", "activeShift", "qualityControl"];
+
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    if (dashboardPreferences?.cardOrder && dashboardPreferences.cardOrder.length > 0) {
+      return dashboardPreferences.cardOrder;
+    }
+    return DEFAULT_CARD_ORDER;
+  });
+
+  const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
+  const [dragOverCardId, setDragOverCardId] = useState<string | null>(null);
+
+  const handleMoveCard = (id: string, direction: "up" | "down") => {
+    const currentIndex = cardOrder.indexOf(id);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= cardOrder.length) return;
+
+    const newOrder = [...cardOrder];
+    const [removed] = newOrder.splice(currentIndex, 1);
+    newOrder.splice(targetIndex, 0, removed);
+
+    setCardOrder(newOrder);
+    const updatedPrefs = { ...localPrefs, cardOrder: newOrder };
+    setLocalPrefs(updatedPrefs);
+    onUpdatePreferences(updatedPrefs);
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedCardId(id);
+    e.dataTransfer.setData("text/plain", id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverCardId !== id) {
+      setDragOverCardId(id);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData("text/plain") || draggedCardId;
+    if (!sourceId || sourceId === targetId) {
+      setDraggedCardId(null);
+      setDragOverCardId(null);
+      return;
+    }
+
+    const sourceIndex = cardOrder.indexOf(sourceId);
+    const targetIndex = cardOrder.indexOf(targetId);
+    if (sourceIndex === -1 || targetIndex === -1) return;
+
+    const newOrder = [...cardOrder];
+    const [removed] = newOrder.splice(sourceIndex, 1);
+    newOrder.splice(targetIndex, 0, removed);
+
+    setCardOrder(newOrder);
+    setDraggedCardId(null);
+    setDragOverCardId(null);
+
+    const updatedPrefs = { ...localPrefs, cardOrder: newOrder };
+    setLocalPrefs(updatedPrefs);
+    onUpdatePreferences(updatedPrefs);
+  };
+
   const handleSavePreferences = () => {
-    onUpdatePreferences(localPrefs);
+    onUpdatePreferences({ ...localPrefs, cardOrder });
     setIsEditing(false);
   };
 
@@ -129,9 +201,18 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
               Ações Rápidas de Operação
             </h3>
           </div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">
-            Acesso Direto
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">
+              Acesso Direto
+            </span>
+            <button
+              onClick={() => setIsEditing(!isEditing)}
+              className="text-slate-600 hover:text-slate-900 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl border border-slate-200"
+            >
+              <Settings className="h-3.5 w-3.5 text-slate-500" />
+              <span>Configurar Painel</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -211,156 +292,7 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
         </div>
       </div>
 
-      {/* 2. CARD HERO (DESTAQUE OPERACIONAL DO DIA) */}
-      <div className="card-dark text-white p-6 sm:p-8 space-y-6 relative overflow-hidden">
-        
-        {/* Glow de fundo */}
-        <div className="absolute -top-24 -right-24 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Header do Card: Linha de Badges */}
-        <div className="flex flex-wrap items-center justify-between gap-3 relative z-10">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Badge Tipo */}
-            <span className="bg-[#10B981] text-white px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wider uppercase shadow-sm flex items-center gap-1.5">
-              <Sparkles className="h-3 w-3" />
-              DESTAQUE OPERACIONAL DO DIA
-            </span>
-
-            {/* Badge Tema */}
-            <span className="border border-amber-400/40 text-amber-300 bg-amber-400/10 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5">
-              Gestão Operacional, LMC & Segurança ANP
-            </span>
-          </div>
-
-          {/* Botão de Ajustar Dashboard */}
-          <button
-            onClick={() => setIsEditing(!isEditing)}
-            className="text-slate-400 hover:text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/60"
-          >
-            <Settings className="h-3.5 w-3.5" />
-            <span>Configurar Painel</span>
-          </button>
-        </div>
-
-        {/* Seletor de Versões / Modos (Tabs ARA, NVI, KJV) */}
-        <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl w-fit border border-slate-800 relative z-10">
-          {(["ARA", "NVI", "KJV"] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setHeroTab(mode)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                heroTab === mode
-                  ? "bg-[#10B981] text-white shadow-sm font-extrabold"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {mode} - {mode === "ARA" ? "Operacional" : mode === "NVI" ? "Financeiro" : "Auditoria"}
-            </button>
-          ))}
-        </div>
-
-        {/* Corpo / Citação */}
-        <div className="relative z-10 space-y-2 my-2">
-          <blockquote className="text-base sm:text-lg font-medium text-slate-100 italic leading-relaxed border-l-4 border-[#10B981] pl-4 sm:pl-6">
-            "{currentQuote}"
-          </blockquote>
-        </div>
-
-        {/* Rodapé do Card & Ações */}
-        <div className="pt-4 border-t border-slate-800/90 flex flex-wrap items-center justify-between gap-4 relative z-10">
-          
-          {/* Referência do Livro / Diretriz */}
-          <div className="text-xs text-slate-300 font-bold flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-[#10B981]" />
-            <span><strong className="text-[#10B981]">Meu Posto ERP</strong> • Diretrizes ANP nº 816/2020</span>
-          </div>
-
-          {/* Barra de Ferramentas / Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            
-            {/* Copiar citação */}
-            <button
-              onClick={handleCopyQuote}
-              className="p-2 bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition cursor-pointer border border-slate-700/60"
-              title="Copiar instrução"
-            >
-              {copiedQuote ? <Check className="h-4 w-4 text-[#10B981]" /> : <Copy className="h-4 w-4" />}
-            </button>
-
-            {/* Favoritar */}
-            <button
-              onClick={() => setIsFavorite(!isFavorite)}
-              className={`p-2 rounded-xl transition cursor-pointer ${
-                isFavorite
-                  ? "bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40"
-                  : "bg-slate-800/90 text-slate-300 hover:text-white border border-slate-700/60"
-              }`}
-              title="Salvar nos Favoritos"
-            >
-              <Heart className={`h-4 w-4 ${isFavorite ? "fill-[#10B981]" : ""}`} />
-            </button>
-
-            {/* Menu Dropdown: Reflexão */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowReflection(!showReflection);
-                  setShowAiAnalysis(false);
-                }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer border border-slate-700/60"
-              >
-                <span>Reflexão</span>
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-
-              {showReflection && (
-                <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl text-xs space-y-2 z-30">
-                  <h5 className="font-extrabold text-[#10B981] uppercase">Diretriz Operacional</h5>
-                  <p className="text-slate-300 leading-relaxed">
-                    Mantenha a rotina de encerramento de bicos após cada turno e auditoria física semanal de tanques para zero perdas volumétricas.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Menu Dropdown: Análise IA */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowAiAnalysis(!showAiAnalysis);
-                  setShowReflection(false);
-                }}
-                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer border border-[#10B981]/40"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-[#10B981]" />
-                <span>Análise IA ✨</span>
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-
-              {showAiAnalysis && (
-                <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl text-xs space-y-2 z-30">
-                  <div className="flex items-center gap-2 text-[#10B981] font-black uppercase">
-                    <Sparkles className="h-4 w-4" />
-                    <span>Inteligência Meu Posto</span>
-                  </div>
-                  <p className="text-slate-300 leading-relaxed">
-                    Sua operação apresenta taxa de conformidade ANP de <strong className="text-white">{qualityRate}%</strong> e volume acumulado de <strong className="text-white">{totalLitersSold.toLocaleString()} Litros</strong>.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Botão Primário Verde Pílula */}
-            <button
-              onClick={() => onNavigate("lmc")}
-              className="bg-[#10B981] hover:bg-emerald-500 text-white px-5 py-2.5 rounded-full font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer transition"
-            >
-              <span>Acessar Módulo LMC</span>
-              <ArrowUpRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* PAINEL DE CONFIGURAÇÃO (SE EXPANDIDO) */}
       {isEditing && (
@@ -375,28 +307,82 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
             </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { id: "quickStats", label: "Métricas Principais" },
-              { id: "fuelTanks", label: "Reservatórios de Combustível" },
-              { id: "activeShift", label: "Operação de Turno" },
-              { id: "qualityControl", label: "Controle de Qualidade ANP" }
-            ].map((w) => {
-              const key = w.id as keyof DashboardPreferences["visibleWidgets"];
-              const isVis = localPrefs.visibleWidgets[key];
-              return (
-                <button
-                  key={w.id}
-                  onClick={() => handleToggleWidget(key)}
-                  className={`p-3 rounded-xl text-xs font-bold border text-left flex items-center justify-between cursor-pointer transition ${
-                    isVis ? "bg-emerald-50 border-[#00B880] text-[#00B880]" : "bg-slate-50 border-slate-200 text-slate-500"
-                  }`}
-                >
-                  <span>{w.label}</span>
-                  {isVis ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                </button>
-              );
-            })}
+          <div className="space-y-2">
+            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
+              Visibilidade dos Módulos
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { id: "quickStats", label: "Métricas Principais" },
+                { id: "fuelTanks", label: "Reservatórios de Combustível" },
+                { id: "activeShift", label: "Operação de Turno" },
+                { id: "qualityControl", label: "Controle de Qualidade ANP" }
+              ].map((w) => {
+                const key = w.id as keyof DashboardPreferences["visibleWidgets"];
+                const isVis = localPrefs.visibleWidgets[key];
+                return (
+                  <button
+                    key={w.id}
+                    onClick={() => handleToggleWidget(key)}
+                    className={`p-3 rounded-xl text-xs font-bold border text-left flex items-center justify-between cursor-pointer transition ${
+                      isVis ? "bg-emerald-50 border-[#00B880] text-[#00B880]" : "bg-slate-50 border-slate-200 text-slate-500"
+                    }`}
+                  >
+                    <span>{w.label}</span>
+                    {isVis ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
+              Prioridade / Ordem de Exibição dos Cards (Drag-and-Drop ou Botões)
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {cardOrder.map((cardId, idx) => {
+                const cardLabels: Record<string, string> = {
+                  quickStats: "Métricas Principais (Volume, Estoque, ANP)",
+                  fuelTanks: "Status dos Reservatórios de Combustível",
+                  activeShift: "Operação de Turno Atual & Checklists",
+                  qualityControl: "Inspeção de Qualidade & Testes ANP"
+                };
+
+                return (
+                  <div
+                    key={cardId}
+                    className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs font-bold text-slate-700"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 h-5 rounded-full bg-emerald-100 text-[#00B880] text-[10px] font-black flex items-center justify-center shrink-0">
+                        #{idx + 1}
+                      </span>
+                      <span className="truncate">{cardLabels[cardId] || cardId}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleMoveCard(cardId, "up")}
+                        disabled={idx === 0}
+                        className="p-1 hover:bg-slate-200 rounded disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+                        title="Mover para cima"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5 text-slate-600" />
+                      </button>
+                      <button
+                        onClick={() => handleMoveCard(cardId, "down")}
+                        disabled={idx === cardOrder.length - 1}
+                        className="p-1 hover:bg-slate-200 rounded disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+                        title="Mover para baixo"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5 text-slate-600" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex items-center gap-4 pt-2">
@@ -458,258 +444,303 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
         </div>
       </div>
 
-      {/* 3. GRID DE MÉTRICAS / ESTATÍSTICAS (2x2 GRID) */}
-      {localPrefs.visibleWidgets.quickStats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          {/* Card 1: Volume Vendido */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:shadow-md transition-all duration-300">
-            <span className="text-[#64748B] font-mono tracking-wider font-bold text-[11px] uppercase block">
-              VOLUME VENDIDO (HOJE)
-            </span>
-            <div className="text-[#0F172A] text-2xl sm:text-4xl font-extrabold font-display mt-1">
-              {totalLitersSold.toLocaleString("pt-BR")}<span className="text-sm font-bold text-slate-400 ml-1">L</span>
-            </div>
-            <p className="text-xs text-[#64748B] font-medium mt-2">
-              Meta: {dailyGoal.toLocaleString("pt-BR")}L ({progressPercent}%)
-            </p>
-            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mt-2">
-              <div className="h-full bg-[#00B880] transition-all duration-500" style={{ width: `${progressPercent}%` }} />
-            </div>
-          </div>
+      {/* 3. CARDS REORGANIZÁVEIS POR DRAG-AND-DROP */}
+      <div className="space-y-6">
+        {cardOrder.map((cardId, index) => {
+          if (!localPrefs.visibleWidgets[cardId as keyof DashboardPreferences["visibleWidgets"]]) {
+            return null;
+          }
 
-          {/* Card 2: Litros Estocados */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:shadow-md transition-all duration-300">
-            <span className="text-[#64748B] font-mono tracking-wider font-bold text-[11px] uppercase block">
-              ESTOQUE DE COMBUSTÍVEL
-            </span>
-            <div className="text-[#0F172A] text-2xl sm:text-4xl font-extrabold font-display mt-1">
-              {tanks.reduce((sum, t) => sum + t.volumeAtual, 0).toLocaleString("pt-BR")}<span className="text-sm font-bold text-slate-400 ml-1">L</span>
-            </div>
-            <p className="text-xs text-[#64748B] font-medium mt-2">
-              distribuído em {tanks.length} tanques monitorados
-            </p>
-          </div>
+          const isOver = dragOverCardId === cardId;
+          const isDraggingThis = draggedCardId === cardId;
 
-          {/* Card 3: Alertantes / Reservatórios */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:shadow-md transition-all duration-300">
-            <span className="text-[#64748B] font-mono tracking-wider font-bold text-[11px] uppercase block">
-              ALERTAS CRÍTICOS
-            </span>
-            <div className={`text-2xl sm:text-4xl font-extrabold font-display mt-1 ${criticalTanks.length > 0 ? "text-rose-600" : "text-[#00B880]"}`}>
-              {criticalTanks.length}<span className="text-sm font-bold text-slate-400 ml-1">alerta(s)</span>
-            </div>
-            <p className="text-xs text-[#64748B] font-medium mt-2">
-              {criticalTanks.length > 0 ? "nível baixo em reservatórios" : "tanques em nível seguro"}
-            </p>
-          </div>
-
-          {/* Card 4: Conformidade ANP */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:shadow-md transition-all duration-300">
-            <span className="text-[#64748B] font-mono tracking-wider font-bold text-[11px] uppercase block">
-              CONFORMIDADE ANP
-            </span>
-            <div className="text-[#0F172A] text-2xl sm:text-4xl font-extrabold font-display mt-1">
-              {qualityRate}%
-            </div>
-            <p className="text-xs text-[#64748B] font-medium mt-2">
-              {compliantAudits} de {totalAudits} testes aprovados
-            </p>
-          </div>
-
-        </div>
-      )}
-
-      {/* 4. VISUALIZAÇÃO DOS TANQUES DE COMBUSTÍVEL */}
-      {localPrefs.visibleWidgets.fuelTanks && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
-            <div>
-              <h3 className="text-base font-extrabold text-[#0F172A] flex items-center gap-2">
-                <Fuel className="text-[#00B880] h-5 w-5" />
-                Status de Reservatórios & Nível Volumétrico
-              </h3>
-              <p className="text-xs text-[#64748B]">Medição em tempo real de tanques de armazenamento</p>
-            </div>
-
-            <button
-              onClick={() => onNavigate("tanques")}
-              className="px-4 py-2 bg-slate-50 hover:bg-emerald-50 text-[#0F172A] hover:text-[#00B880] rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200 cursor-pointer"
-            >
-              <span>Gerenciamento de Tanques</span>
-              <ArrowUpRight className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {tanks.map((tank) => {
-              const pct = Math.min(100, Math.max(0, (tank.volumeAtual / tank.capacidadeMaxima) * 100));
-              const isCritical = tank.volumeAtual <= tank.pontoCriticoAlerta;
-              
-              let fluidBg = "from-[#00B880] to-emerald-600";
-              let borderColor = "border-slate-200/80";
-              
-              if (isCritical) {
-                fluidBg = "from-rose-500 to-rose-600";
-                borderColor = "border-rose-200 bg-rose-50/20";
-              } else if (pct < 40) {
-                fluidBg = "from-amber-400 to-amber-500";
-                borderColor = "border-amber-200 bg-amber-50/20";
-              } else if (tank.combustivel.includes("Gasolina Comum")) {
-                fluidBg = "from-amber-400 to-amber-600";
-              } else if (tank.combustivel.includes("Gasolina Aditivada")) {
-                fluidBg = "from-rose-500 to-rose-700";
-              } else if (tank.combustivel.includes("Etanol")) {
-                fluidBg = "from-sky-400 to-sky-600";
-              } else if (tank.combustivel.includes("Diesel")) {
-                fluidBg = "from-emerald-500 to-emerald-700";
-              }
-
-              return (
-                <div key={tank.id} className={`p-4 rounded-2xl border ${borderColor} flex flex-col items-center bg-white shadow-2xs`}>
-                  <div className="text-center w-full">
-                    <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full border border-slate-200 uppercase">
-                      ID: {tank.identificador}
-                    </span>
-                    <h4 className="text-xs font-extrabold text-[#0F172A] mt-2 uppercase truncate">
-                      {tank.combustivel}
-                    </h4>
-                  </div>
-
-                  <div className="w-20 h-32 bg-slate-100 border-2 border-slate-200 rounded-b-2xl relative overflow-hidden my-4 shadow-inner flex flex-col justify-end">
-                    <div className="absolute top-0 left-0 right-0 h-3 bg-slate-200/80 border-b border-slate-300/50 rounded-full z-20" />
-                    
-                    <div
-                      className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t ${fluidBg} transition-all duration-1000 ease-in-out`}
-                      style={{ height: `${pct}%` }}
-                    >
-                      {pct > 0 && <div className="absolute -top-1 left-0 right-0 h-2 bg-white/20 rounded-full z-10" />}
-                    </div>
-
-                    <div className="absolute inset-0 flex items-center justify-center font-extrabold text-xs text-[#0F172A] z-20 bg-white/80 backdrop-blur-2xs h-fit w-fit mx-auto px-2 py-0.5 rounded-md shadow-2xs">
-                      {Math.round(pct)}%
-                    </div>
-                  </div>
-
-                  <div className="w-full text-center space-y-1">
-                    <p className="text-xs text-[#0F172A] font-mono font-extrabold">
-                      {tank.volumeAtual.toLocaleString()}L / {tank.capacidadeMaxima.toLocaleString()}L
-                    </p>
-                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <div className={`h-full bg-gradient-to-r ${fluidBg}`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 5. TURNO ATIVO & INSPEÇÃO QUALIDADE */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Turno Ativo */}
-        {localPrefs.visibleWidgets.activeShift && (
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <h3 className="text-sm font-extrabold text-[#0F172A] flex items-center gap-2 uppercase tracking-wide pb-3 border-b border-slate-100">
-              <UserCheck className="text-[#00B880] h-5 w-5" />
-              Operação de Turno Atual
-            </h3>
-
-            {activeShift ? (
-              <div className="space-y-4">
-                <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100 flex justify-between items-center">
-                  <div>
-                    <p className="text-[10px] font-bold text-[#00B880] uppercase tracking-wider">Frentista Responsável</p>
-                    <p className="text-sm font-extrabold text-[#0F172A]">{activeShift.frentistaResponsavel}</p>
-                  </div>
-                  <span className="bg-[#00B880] text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase shadow-2xs">
-                    {activeShift.turno}
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Verificação de Checklists</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: "Limpeza de Pistas", status: activeShift.checklist.limpezaPistas },
-                      { label: "Uso de EPIs", status: activeShift.checklist.usoEPIs },
-                      { label: "Equipamentos ANP", status: activeShift.checklist.afericaoEquipamentosSeguranca },
-                      { label: "Teste do Gerador", status: activeShift.checklist.testeGerador }
-                    ].map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/60 text-xs font-semibold text-slate-700">
-                        <span>{item.label}</span>
-                        {item.status ? (
-                          <CheckCircle2 className="h-4 w-4 text-[#00B880]" />
-                        ) : (
-                          <ShieldAlert className="h-4 w-4 text-rose-500" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-8 text-center space-y-3">
-                <HelpCircle className="h-10 w-10 text-slate-300 mx-auto" />
-                <p className="text-xs font-bold text-slate-500">Nenhum turno em andamento no momento</p>
-                <button
-                  onClick={() => onNavigate("escalas")}
-                  className="px-4 py-2 bg-[#00B880] hover:bg-[#05C480] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+          const renderDragHeader = (title: string, icon: React.ReactNode) => (
+            <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100 select-none">
+              <div className="flex items-center gap-2">
+                <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, cardId)}
+                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded cursor-grab active:cursor-grabbing transition"
+                  title="Clique e arraste para reordenar este card"
                 >
-                  Abrir Novo Turno
+                  <GripVertical className="h-4 w-4" />
+                </div>
+                <span className="text-[10px] font-black bg-emerald-100 text-[#00B880] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  #{index + 1}
+                </span>
+                <h3 className="text-sm font-extrabold text-[#0F172A] flex items-center gap-2 uppercase tracking-wide">
+                  {icon}
+                  {title}
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleMoveCard(cardId, "up")}
+                  disabled={index === 0}
+                  className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                  title="Mover para cima"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => handleMoveCard(cardId, "down")}
+                  disabled={index === cardOrder.length - 1}
+                  className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                  title="Mover para baixo"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
                 </button>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          );
 
-        {/* Auditorias de Qualidade ANP */}
-        {localPrefs.visibleWidgets.qualityControl && (
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <h3 className="text-sm font-extrabold text-[#0F172A] flex items-center gap-2 uppercase tracking-wide pb-3 border-b border-slate-100">
-              <Thermometer className="text-[#00B880] h-5 w-5" />
-              Inspeção de Qualidade & Testes ANP
-            </h3>
+          return (
+            <div
+              key={cardId}
+              onDragOver={(e) => handleDragOver(e, cardId)}
+              onDrop={(e) => handleDrop(e, cardId)}
+              className={`transition-all duration-200 rounded-2xl ${
+                isOver ? "ring-2 ring-[#00B880] ring-offset-2 scale-[1.005]" : ""
+              } ${isDraggingThis ? "opacity-40" : ""}`}
+            >
+              {cardId === "quickStats" && (
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+                  {renderDragHeader("Métricas Principais de Vendas e ANP", <TrendingUp className="text-[#00B880] h-5 w-5" />)}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+                    {/* Card 1: Volume Vendido */}
+                    <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 shadow-2xs relative overflow-hidden group hover:shadow-xs transition-all duration-300">
+                      <span className="text-[#64748B] font-mono tracking-wider font-bold text-[10px] uppercase block">
+                        VOLUME VENDIDO (HOJE)
+                      </span>
+                      <div className="text-[#0F172A] text-2xl sm:text-3xl font-extrabold font-display mt-1">
+                        {totalLitersSold.toLocaleString("pt-BR")}<span className="text-xs font-bold text-slate-400 ml-1">L</span>
+                      </div>
+                      <p className="text-[11px] text-[#64748B] font-medium mt-1">
+                        Meta: {dailyGoal.toLocaleString("pt-BR")}L ({progressPercent}%)
+                      </p>
+                      <div className="h-1.5 w-full bg-slate-200/80 rounded-full overflow-hidden mt-2">
+                        <div className="h-full bg-[#00B880] transition-all duration-500" style={{ width: `${progressPercent}%` }} />
+                      </div>
+                    </div>
 
-            {qualityAudits.length > 0 ? (
-              <div className="space-y-3">
-                {qualityAudits.slice(-3).reverse().map((audit) => (
-                  <div key={audit.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex justify-between items-center text-xs">
-                    <div>
-                      <p className="font-extrabold text-[#0F172A]">{audit.combustivel}</p>
-                      <p className="text-[11px] text-[#64748B] font-mono mt-0.5">
-                        {audit.temperatura}°C | Densidade: {audit.densidade} g/cm³
+                    {/* Card 2: Litros Estocados */}
+                    <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 shadow-2xs relative overflow-hidden group hover:shadow-xs transition-all duration-300">
+                      <span className="text-[#64748B] font-mono tracking-wider font-bold text-[10px] uppercase block">
+                        ESTOQUE DE COMBUSTÍVEL
+                      </span>
+                      <div className="text-[#0F172A] text-2xl sm:text-3xl font-extrabold font-display mt-1">
+                        {tanks.reduce((sum, t) => sum + t.volumeAtual, 0).toLocaleString("pt-BR")}<span className="text-xs font-bold text-slate-400 ml-1">L</span>
+                      </div>
+                      <p className="text-[11px] text-[#64748B] font-medium mt-1">
+                        distribuído em {tanks.length} tanques monitorados
                       </p>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${audit.conforme ? "bg-emerald-100 text-[#00B880]" : "bg-rose-100 text-rose-600"}`}>
-                      {audit.conforme ? "CONFORME" : "REPROVADO"}
-                    </span>
-                  </div>
-                ))}
-                
-                <button
-                  onClick={() => onNavigate("qualidade")}
-                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-[#0F172A] font-bold text-xs rounded-xl transition cursor-pointer"
-                >
-                  Ver Histórico de Qualidade
-                </button>
-              </div>
-            ) : (
-              <div className="py-8 text-center space-y-3">
-                <p className="text-xs font-bold text-slate-500">Sem testes de qualidade efetuados hoje</p>
-                <button
-                  onClick={() => onNavigate("qualidade")}
-                  className="px-4 py-2 bg-[#00B880] hover:bg-[#05C480] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
-                >
-                  Registrar Teste Prova Rápida ANP
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
+                    {/* Card 3: Alertas Críticos */}
+                    <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 shadow-2xs relative overflow-hidden group hover:shadow-xs transition-all duration-300">
+                      <span className="text-[#64748B] font-mono tracking-wider font-bold text-[10px] uppercase block">
+                        ALERTAS CRÍTICOS
+                      </span>
+                      <div className={`text-2xl sm:text-3xl font-extrabold font-display mt-1 ${criticalTanks.length > 0 ? "text-rose-600" : "text-[#00B880]"}`}>
+                        {criticalTanks.length}<span className="text-xs font-bold text-slate-400 ml-1">alerta(s)</span>
+                      </div>
+                      <p className="text-[11px] text-[#64748B] font-medium mt-1">
+                        {criticalTanks.length > 0 ? "nível baixo em reservatórios" : "tanques em nível seguro"}
+                      </p>
+                    </div>
+
+                    {/* Card 4: Conformidade ANP */}
+                    <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 shadow-2xs relative overflow-hidden group hover:shadow-xs transition-all duration-300">
+                      <span className="text-[#64748B] font-mono tracking-wider font-bold text-[10px] uppercase block">
+                        CONFORMIDADE ANP
+                      </span>
+                      <div className="text-[#0F172A] text-2xl sm:text-3xl font-extrabold font-display mt-1">
+                        {qualityRate}%
+                      </div>
+                      <p className="text-[11px] text-[#64748B] font-medium mt-1">
+                        {compliantAudits} de {totalAudits} testes aprovados
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {cardId === "fuelTanks" && (
+                <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                  {renderDragHeader("Status de Reservatórios & Nível Volumétrico", <Fuel className="text-[#00B880] h-5 w-5" />)}
+                  
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
+                    <p className="text-xs text-[#64748B]">Medição em tempo real de tanques de armazenamento</p>
+                    <button
+                      onClick={() => onNavigate("tanques")}
+                      className="px-3 py-1.5 bg-slate-50 hover:bg-emerald-50 text-[#0F172A] hover:text-[#00B880] rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200 cursor-pointer"
+                    >
+                      <span>Gerenciamento de Tanques</span>
+                      <ArrowUpRight className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pt-1">
+                    {tanks.map((tank) => {
+                      const pct = Math.min(100, Math.max(0, (tank.volumeAtual / tank.capacidadeMaxima) * 100));
+                      const isCritical = tank.volumeAtual <= tank.pontoCriticoAlerta;
+                      
+                      let fluidBg = "from-[#00B880] to-emerald-600";
+                      let borderColor = "border-slate-200/80";
+                      
+                      if (isCritical) {
+                        fluidBg = "from-rose-500 to-rose-600";
+                        borderColor = "border-rose-200 bg-rose-50/20";
+                      } else if (pct < 40) {
+                        fluidBg = "from-amber-400 to-amber-500";
+                        borderColor = "border-amber-200 bg-amber-50/20";
+                      } else if (tank.combustivel.includes("Gasolina Comum")) {
+                        fluidBg = "from-amber-400 to-amber-600";
+                      } else if (tank.combustivel.includes("Gasolina Aditivada")) {
+                        fluidBg = "from-rose-500 to-rose-700";
+                      } else if (tank.combustivel.includes("Etanol")) {
+                        fluidBg = "from-sky-400 to-sky-600";
+                      } else if (tank.combustivel.includes("Diesel")) {
+                        fluidBg = "from-emerald-500 to-emerald-700";
+                      }
+
+                      return (
+                        <div key={tank.id} className={`p-4 rounded-2xl border ${borderColor} flex flex-col items-center bg-white shadow-2xs`}>
+                          <div className="text-center w-full">
+                            <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full border border-slate-200 uppercase">
+                              ID: {tank.identificador}
+                            </span>
+                            <h4 className="text-xs font-extrabold text-[#0F172A] mt-2 uppercase truncate">
+                              {tank.combustivel}
+                            </h4>
+                          </div>
+
+                          <div className="w-20 h-32 bg-slate-100 border-2 border-slate-200 rounded-b-2xl relative overflow-hidden my-4 shadow-inner flex flex-col justify-end">
+                            <div className="absolute top-0 left-0 right-0 h-3 bg-slate-200/80 border-b border-slate-300/50 rounded-full z-20" />
+                            
+                            <div
+                              className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t ${fluidBg} transition-all duration-1000 ease-in-out`}
+                              style={{ height: `${pct}%` }}
+                            >
+                              {pct > 0 && <div className="absolute -top-1 left-0 right-0 h-2 bg-white/20 rounded-full z-10" />}
+                            </div>
+
+                            <div className="absolute inset-0 flex items-center justify-center font-extrabold text-xs text-[#0F172A] z-20 bg-white/80 backdrop-blur-2xs h-fit w-fit mx-auto px-2 py-0.5 rounded-md shadow-2xs">
+                              {Math.round(pct)}%
+                            </div>
+                          </div>
+
+                          <div className="w-full text-center space-y-1">
+                            <p className="text-xs text-[#0F172A] font-mono font-extrabold">
+                              {tank.volumeAtual.toLocaleString()}L / {tank.capacidadeMaxima.toLocaleString()}L
+                            </p>
+                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div className={`h-full bg-gradient-to-r ${fluidBg}`} style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {cardId === "activeShift" && (
+                <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                  {renderDragHeader("Operação de Turno Atual", <UserCheck className="text-[#00B880] h-5 w-5" />)}
+
+                  {activeShift ? (
+                    <div className="space-y-4 pt-1">
+                      <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100 flex justify-between items-center">
+                        <div>
+                          <p className="text-[10px] font-bold text-[#00B880] uppercase tracking-wider">Frentista Responsável</p>
+                          <p className="text-sm font-extrabold text-[#0F172A]">{activeShift.frentistaResponsavel}</p>
+                        </div>
+                        <span className="bg-[#00B880] text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase shadow-2xs">
+                          {activeShift.turno}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Verificação de Checklists</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { label: "Limpeza de Pistas", status: activeShift.checklist.limpezaPistas },
+                            { label: "Uso de EPIs", status: activeShift.checklist.usoEPIs },
+                            { label: "Equipamentos ANP", status: activeShift.checklist.afericaoEquipamentosSeguranca },
+                            { label: "Teste do Gerador", status: activeShift.checklist.testeGerador }
+                          ].map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/60 text-xs font-semibold text-slate-700">
+                              <span>{item.label}</span>
+                              {item.status ? (
+                                <CheckCircle2 className="h-4 w-4 text-[#00B880]" />
+                              ) : (
+                                <ShieldAlert className="h-4 w-4 text-rose-500" />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center space-y-3">
+                      <HelpCircle className="h-10 w-10 text-slate-300 mx-auto" />
+                      <p className="text-xs font-bold text-slate-500">Nenhum turno em andamento no momento</p>
+                      <button
+                        onClick={() => onNavigate("escalas")}
+                        className="px-4 py-2 bg-[#00B880] hover:bg-[#05C480] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+                      >
+                        Abrir Novo Turno
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {cardId === "qualityControl" && (
+                <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                  {renderDragHeader("Inspeção de Qualidade & Testes ANP", <Thermometer className="text-[#00B880] h-5 w-5" />)}
+
+                  {qualityAudits.length > 0 ? (
+                    <div className="space-y-3 pt-1">
+                      {qualityAudits.slice(-3).reverse().map((audit) => (
+                        <div key={audit.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex justify-between items-center text-xs">
+                          <div>
+                            <p className="font-extrabold text-[#0F172A]">{audit.combustivel}</p>
+                            <p className="text-[11px] text-[#64748B] font-mono mt-0.5">
+                              {audit.temperatura}°C | Densidade: {audit.densidade} g/cm³
+                            </p>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${audit.conforme ? "bg-emerald-100 text-[#00B880]" : "bg-rose-100 text-rose-600"}`}>
+                            {audit.conforme ? "CONFORME" : "REPROVADO"}
+                          </span>
+                        </div>
+                      ))}
+                      
+                      <button
+                        onClick={() => onNavigate("qualidade")}
+                        className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-[#0F172A] font-bold text-xs rounded-xl transition cursor-pointer"
+                      >
+                        Ver Histórico de Qualidade
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center space-y-3">
+                      <p className="text-xs font-bold text-slate-500">Sem testes de qualidade efetuados hoje</p>
+                      <button
+                        onClick={() => onNavigate("qualidade")}
+                        className="px-4 py-2 bg-[#00B880] hover:bg-[#05C480] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+                      >
+                        Registrar Teste Prova Rápida ANP
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
     </div>

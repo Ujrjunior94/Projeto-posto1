@@ -17,6 +17,10 @@ import {
   Edit2,
   RefreshCw,
   Info,
+  Zap,
+  CheckCircle2,
+  Truck,
+  Sparkles,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -123,14 +127,180 @@ export default function LMCManagement({
     return acc;
   }, {});
 
+  // Helper to auto-calculate LMC volumes from 'Leitura de Bicos' and 'Recebimento de Combustível'
+  const calculateAutoLmcValues = (dateStr: string, lmcFuel: string) => {
+    const mappedFuel = mapLmcFuelToTankFuel(lmcFuel);
+
+    // 1. Matched tanks
+    const matchedTanks = (appState.tanks || []).filter(
+      (t) => t.combustivel === mappedFuel
+    );
+    const matchedTankIds = new Set(matchedTanks.map((t) => t.id));
+
+    // 2. Matched nozzles
+    const matchedNozzles = (appState.nozzles || []).filter((n) =>
+      matchedTankIds.has(n.tanqueId)
+    );
+    const matchedNozzleIds = new Set(matchedNozzles.map((n) => n.id));
+
+    // 3. Liters Sold from Nozzle Closings (Leitura de Bicos / Encerrantes)
+    const shiftsOnDate = (appState.shifts || []).filter(
+      (s) => s.data === dateStr && (!s.stationCnpj || s.stationCnpj === cnpjPosto)
+    );
+    const shiftIdsOnDate = new Set(shiftsOnDate.map((s) => s.id));
+
+    let totalLitersSoldFromBicos = 0;
+    (appState.nozzleClosings || []).forEach((nc) => {
+      if (
+        matchedNozzleIds.has(nc.nozzleId) &&
+        (shiftIdsOnDate.has(nc.shiftId) || (nc as any).data === dateStr)
+      ) {
+        totalLitersSoldFromBicos += Number(nc.litrosVendidos) || 0;
+      }
+    });
+
+    // 4. Fuel Receipts from Deliveries (Recebimento de Combustível)
+    let totalDeliveryVolumeFromNFe = 0;
+    (appState.deliveries || []).forEach((d) => {
+      const dDate = d.date || d.data;
+      const dFuel = d.fuelType || d.combustivel || "";
+      const isMatchingFuel =
+        dFuel.includes(mappedFuel) ||
+        mappedFuel.includes(dFuel) ||
+        dFuel.includes(lmcFuel);
+
+      if (
+        dDate === dateStr &&
+        isMatchingFuel &&
+        (!d.stationCnpj || d.stationCnpj === cnpjPosto)
+      ) {
+        totalDeliveryVolumeFromNFe += Number(d.volume || d.volumeRecebido) || 0;
+      }
+    });
+
+    // 5. Opening Stock (Estoque Inicial)
+    const prevDateObj = new Date(dateStr);
+    prevDateObj.setDate(prevDateObj.getDate() - 1);
+    const prevDate = prevDateObj.toISOString().split("T")[0];
+
+    const prevLmc = lmc.find(
+      (r) =>
+        r.fuelType === lmcFuel &&
+        r.date === prevDate &&
+        r.stationCnpj === cnpjPosto
+    );
+
+    let openingStock = 0;
+    if (prevLmc) {
+      openingStock = Number(prevLmc.physicalStock) || 0;
+    } else {
+      const currentTankSum = matchedTanks.reduce(
+        (acc, t) => acc + (Number(t.volumeAtual) || 0),
+        0
+      );
+      openingStock =
+        currentTankSum > 0
+          ? currentTankSum + totalLitersSoldFromBicos - totalDeliveryVolumeFromNFe
+          : 12500;
+    }
+
+    const expectedStock = openingStock + totalDeliveryVolumeFromNFe - totalLitersSoldFromBicos;
+    const isToday = dateStr === new Date().toISOString().split("T")[0];
+    const tankCurrentTotal = matchedTanks.reduce((acc, t) => acc + (Number(t.volumeAtual) || 0), 0);
+    const physicalStock = isToday && tankCurrentTotal > 0 ? tankCurrentTotal : Math.max(0, expectedStock);
+
+    return {
+      openingStock: Math.max(0, openingStock),
+      deliveryVolume: totalDeliveryVolumeFromNFe,
+      litersSold: totalLitersSoldFromBicos,
+      physicalStock: Math.max(0, physicalStock),
+      expectedStock: Math.max(0, expectedStock),
+    };
+  };
+
+  const handleAutoFillModal = (targetDate?: string, targetFuel?: string) => {
+    const d = targetDate || modalDate;
+    const f = targetFuel || modalFuel;
+    const vals = calculateAutoLmcValues(d, f);
+
+    setModalOpening(String(vals.openingStock));
+    setModalDelivery(String(vals.deliveryVolume));
+    setModalSold(String(vals.litersSold));
+    setModalPhysical(String(vals.physicalStock));
+  };
+
+  const handleSyncErpToLmc = () => {
+    // Synchronize all available dates with nozzle closings or deliveries
+    const dateSet = new Set<string>();
+    dateSet.add(new Date().toISOString().split("T")[0]);
+
+    (appState.shifts || []).forEach((s) => { if (s.data) dateSet.add(s.data); });
+    (appState.nozzleClosings || []).forEach((nc) => { if ((nc as any).data) dateSet.add((nc as any).data); });
+    (appState.deliveries || []).forEach((d) => {
+      const dDate = d.date || d.data;
+      if (dDate) dateSet.add(dDate);
+    });
+
+    let updatedList = [...lmc];
+    let syncedCount = 0;
+
+    dateSet.forEach((d) => {
+      FUEL_LMC_OPTIONS.forEach((f) => {
+        const vals = calculateAutoLmcValues(d, f);
+        // Only create/update if there are sales, deliveries, or previous record exists
+        const existingIdx = updatedList.findIndex(
+          (r) => r.date === d && r.fuelType === f && r.stationCnpj === cnpjPosto
+        );
+
+        if (existingIdx >= 0) {
+          updatedList[existingIdx] = {
+            ...updatedList[existingIdx],
+            openingStock: vals.openingStock,
+            deliveryVolume: vals.deliveryVolume,
+            litersSold: vals.litersSold,
+            physicalStock: vals.physicalStock,
+          };
+          syncedCount++;
+        } else if (vals.litersSold > 0 || vals.deliveryVolume > 0) {
+          updatedList.push({
+            id: `lmc_auto_${d}_${f.replace(/\s+/g, "_")}_${Date.now()}`,
+            date: d,
+            fuelType: f,
+            openingStock: vals.openingStock,
+            deliveryVolume: vals.deliveryVolume,
+            litersSold: vals.litersSold,
+            physicalStock: vals.physicalStock,
+            stationCnpj: cnpjPosto,
+          });
+          syncedCount++;
+        }
+      });
+    });
+
+    onUpdateLmc(updatedList);
+    onAddAuditLog(
+      "UPDATE",
+      "LMC",
+      `Sincronização ERP concluída: Leitura de Bicos e Recebimento de Cargas integrados ao LMC (${syncedCount} registros processados)`,
+      "Regular"
+    );
+    alert(`⚡ Sincronização Automática Concluída!\n\n${syncedCount} lançamentos do Livro LMC foram integrados com os dados de Leitura de Bicos e Recebimento de Combustível (NF-e).`);
+  };
+
   const handleOpenAddModal = () => {
     setEditingId(null);
-    setModalFuel("Gasolina C Comum (E30)");
-    setModalDate(new Date().toISOString().split("T")[0]);
-    setModalOpening("");
-    setModalDelivery("0");
-    setModalSold("");
-    setModalPhysical("");
+    const today = new Date().toISOString().split("T")[0];
+    const defaultFuel = "Gasolina C Comum (E30)";
+    setModalFuel(defaultFuel);
+    setModalDate(today);
+
+    // Auto-prefill with ERP readings right away
+    const autoVals = calculateAutoLmcValues(today, defaultFuel);
+    setModalOpening(String(autoVals.openingStock));
+    setModalDelivery(String(autoVals.deliveryVolume));
+    setModalSold(String(autoVals.litersSold));
+    setModalPhysical(String(autoVals.physicalStock));
+
     setError("");
     setIsModalOpen(true);
   };
@@ -621,7 +791,15 @@ export default function LMCManagement({
             Balanço consolidado de movimentação volumétrica e controle regulamentar de perdas (ANP E30 / B15)
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleSyncErpToLmc}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+            title="Preencher automaticamente as colunas de estoque e vendas do LMC a partir das leituras de bicos e NF-e de combustível"
+          >
+            <Zap className="h-3.5 w-3.5" />
+            Sincronizar Bicos & Cargas
+          </button>
           <button
             onClick={downloadLMCPDF}
             className="px-4 py-2 bg-white border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl hover:bg-slate-50 transition flex items-center gap-1.5 shadow-sm cursor-pointer"
@@ -705,22 +883,56 @@ export default function LMCManagement({
           {(() => {
             const record = lmc.find(r => r.fuelType === viewFuel && r.date === viewDate && r.stationCnpj === cnpjPosto);
             if (!record) {
+              const autoVal = calculateAutoLmcValues(viewDate, viewFuel);
               return (
-                <div className="bg-white border border-slate-200 text-center py-16 rounded-2xl shadow-sm space-y-4">
-                  <p className="text-slate-400 text-xs italic">
-                    Nenhum lançamento no LMC para esta data e combustível.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setModalFuel(viewFuel);
-                      setModalDate(viewDate);
-                      handleOpenAddModal();
-                    }}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1.5 mx-auto cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Lançar Registro para esta Data
-                  </button>
+                <div className="bg-white border border-slate-200 text-center py-12 px-6 rounded-2xl shadow-sm space-y-4 max-w-xl mx-auto">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
+                    <Zap className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">Sem Folha LMC Lançada nesta Data</h4>
+                    <p className="text-slate-500 text-xs mt-1">
+                      O ERP identificou <strong className="text-slate-700">{autoVal.litersSold.toLocaleString("pt-BR")} L</strong> vendidos nos bicos e <strong className="text-slate-700">{autoVal.deliveryVolume.toLocaleString("pt-BR")} L</strong> recebidos por NF-e para {viewFuel}.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <button
+                      onClick={() => {
+                        const newRec: LmcRecord = {
+                          id: `lmc_${Date.now()}`,
+                          date: viewDate,
+                          fuelType: viewFuel,
+                          openingStock: autoVal.openingStock,
+                          deliveryVolume: autoVal.deliveryVolume,
+                          litersSold: autoVal.litersSold,
+                          physicalStock: autoVal.physicalStock,
+                          stationCnpj: cnpjPosto,
+                        };
+                        onUpdateLmc([...lmc, newRec]);
+                        onAddAuditLog(
+                          "CREATE",
+                          "LMC",
+                          `Folha LMC gerada automaticamente via bicos e cargas para ${viewFuel} em ${viewDate}`,
+                          "Regular"
+                        );
+                      }}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      Auto-Gerar Folha LMC (Bicos + NF-e)
+                    </button>
+                    <button
+                      onClick={() => {
+                        setModalFuel(viewFuel);
+                        setModalDate(viewDate);
+                        handleOpenAddModal();
+                      }}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Lançamento Manual
+                    </button>
+                  </div>
                 </div>
               );
             }
@@ -1122,11 +1334,35 @@ export default function LMCManagement({
             <form onSubmit={handleSaveRecord} className="space-y-4">
               {error && <p className="p-2.5 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl text-xs font-semibold">{error}</p>}
 
+              {/* ERP Integration Helper Card */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                <div className="space-y-0.5">
+                  <span className="font-extrabold text-emerald-800 flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 text-emerald-600" />
+                    Integração Direta ERP
+                  </span>
+                  <p className="text-[11px] text-emerald-700">
+                    Sincronizar leituras de bico e entregas NF-e do dia.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAutoFillModal(modalDate, modalFuel)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-xl transition shrink-0 cursor-pointer shadow-xs"
+                >
+                  Auto-Preencher
+                </button>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Combustível / Produto</label>
                 <select
                   value={modalFuel}
-                  onChange={(e) => setModalFuel(e.target.value)}
+                  onChange={(e) => {
+                    const f = e.target.value;
+                    setModalFuel(f);
+                    handleAutoFillModal(modalDate, f);
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 >
                   {FUEL_LMC_OPTIONS.map((f) => (
@@ -1143,7 +1379,11 @@ export default function LMCManagement({
                   type="date"
                   required
                   value={modalDate}
-                  onChange={(e) => setModalDate(e.target.value)}
+                  onChange={(e) => {
+                    const d = e.target.value;
+                    setModalDate(d);
+                    handleAutoFillModal(d, modalFuel);
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none text-slate-700"
                 />
               </div>

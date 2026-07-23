@@ -409,8 +409,9 @@ export default function CloudSyncPanel({
     avatarIcon: profileAvatarIcon,
   };
 
-  // Locks screen password (padrão: adm001)
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  // Locks screen password (auto-unlocked for Gerente/Master/Supervisor/Admin)
+  const isManagerOrAdmin = currentUser?.cargo === "Gerente" || currentUser?.cargo === "Master" || currentUser?.cargo === "Supervisor";
+  const [isUnlocked, setIsUnlocked] = useState(isManagerOrAdmin);
   const [lockPassword, setLockPassword] = useState("");
   const [lockError, setLockError] = useState(false);
 

@@ -279,6 +279,7 @@ export interface DashboardPreferences {
     activeShift: boolean;
     qualityControl: boolean;
   };
+  cardOrder?: string[];
   dailyGoalLiters: number;
 }
 

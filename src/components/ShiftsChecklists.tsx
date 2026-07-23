@@ -435,35 +435,62 @@ export default function ShiftsChecklists({
       onUpdateUsers(updatedUsersList);
     }
 
-    // 2. Helper to extract day info
+    // 2. Helper to extract day info and format for Planner
     const extractDayInfo = (dataStr: string) => {
-      if (!dataStr) return { dayOfWeek: "Dia 01", fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-01` };
-      if (dataStr.startsWith("Dia ")) {
-        const dNum = parseInt(dataStr.replace("Dia ", ""), 10) || 1;
+      const currentYear = activeMonth.year;
+      const currentMonthPadded = String(activeMonth.monthNum).padStart(2, "0");
+
+      if (!dataStr) {
+        return { dayOfWeek: "Dia 01", fullDate: `${currentYear}-${currentMonthPadded}-01` };
+      }
+
+      const str = String(dataStr).trim();
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const parts = str.split("-");
+        const dNum = parseInt(parts[2], 10) || 1;
         const padded = String(dNum).padStart(2, "0");
         return {
           dayOfWeek: `Dia ${padded}`,
-          fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${padded}`,
+          fullDate: `${parts[0]}-${parts[1]}-${padded}`,
         };
       }
-      const digits = dataStr.replace(/\D/g, "");
-      let dNum = 1;
-      if (dataStr.includes("-")) {
-        const parts = dataStr.split("-");
-        dNum = parseInt(parts[parts.length - 1], 10) || 1;
-      } else if (digits) {
-        dNum = parseInt(digits, 10) || 1;
+
+      if (str.includes("/")) {
+        const parts = str.split("/");
+        const dNum = parseInt(parts[0], 10) || 1;
+        const mNum = parts[1] ? parseInt(parts[1], 10) : activeMonth.monthNum;
+        const yNum = parts[2] ? parseInt(parts[2], 10) : currentYear;
+        const paddedD = String(Math.min(Math.max(dNum, 1), 31)).padStart(2, "0");
+        const paddedM = String(Math.min(Math.max(mNum, 1), 12)).padStart(2, "0");
+        return {
+          dayOfWeek: `Dia ${paddedD}`,
+          fullDate: `${yNum}-${paddedM}-${paddedD}`,
+        };
       }
-      if (dNum < 1 || dNum > 31) dNum = 1;
-      const padded = String(dNum).padStart(2, "0");
+
+      if (str.toLowerCase().startsWith("dia ")) {
+        const dNum = parseInt(str.replace(/dia\s+/i, ""), 10) || 1;
+        const paddedD = String(Math.min(Math.max(dNum, 1), 31)).padStart(2, "0");
+        return {
+          dayOfWeek: `Dia ${paddedD}`,
+          fullDate: `${currentYear}-${currentMonthPadded}-${paddedD}`,
+        };
+      }
+
+      const digits = str.replace(/\D/g, "");
+      let dNum = parseInt(digits, 10) || 1;
+      if (dNum > 31) dNum = Math.min(dNum % 100, 31) || 1;
+      const paddedD = String(Math.max(dNum, 1)).padStart(2, "0");
+
       return {
-        dayOfWeek: `Dia ${padded}`,
-        fullDate: `${activeMonth.year}-${String(activeMonth.monthNum).padStart(2, "0")}-${padded}`,
+        dayOfWeek: `Dia ${paddedD}`,
+        fullDate: `${currentYear}-${currentMonthPadded}-${paddedD}`,
       };
     };
 
-    // 3. Process schedules and events
-    const newShifts = [...shifts];
+    // 3. Process schedules and allocate directly into planner shifts
+    let newShifts = [...shifts];
     let schedulesAdded = 0;
     let eventsAdded = 0;
 
@@ -471,7 +498,6 @@ export default function ShiftsChecklists({
       schedules.forEach((s: any) => {
         if (!s.frentistaResponsavel) return;
         const dayInfo = extractDayInfo(s.data);
-        const shiftId = "s_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
 
         let finalTurno = s.turno || "Manhã (06h - 14h)";
         const lowerT = String(finalTurno).toLowerCase();
@@ -482,16 +508,36 @@ export default function ShiftsChecklists({
         else if (lowerT.includes("horista 2") || lowerT === "h2") finalTurno = "Horista 2 (09h - 18h)";
         else if (lowerT.includes("horista") || lowerT === "hr") finalTurno = "Horista (10h - 18h)";
 
-        newShifts.push({
-          id: shiftId,
-          data: dayInfo.fullDate,
-          turno: finalTurno as any,
-          frentistaResponsavel: s.frentistaResponsavel,
-          checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
-          status: "Planejado",
-          stationCnpj: cnpjPosto,
-          dayOfWeek: dayInfo.dayOfWeek,
-        });
+        // Check if shift already exists for this person on this day in the planner
+        const existingIdx = newShifts.findIndex(
+          (sh) =>
+            (!sh.stationCnpj || sh.stationCnpj === cnpjPosto) &&
+            sh.dayOfWeek === dayInfo.dayOfWeek &&
+            sh.frentistaResponsavel.toLowerCase() === s.frentistaResponsavel.trim().toLowerCase()
+        );
+
+        if (existingIdx !== -1) {
+          // Update existing shift in planner cell
+          newShifts[existingIdx] = {
+            ...newShifts[existingIdx],
+            data: dayInfo.fullDate,
+            turno: finalTurno as any,
+            status: "Planejado",
+          };
+        } else {
+          // Add new shift entry to planner cell
+          const shiftId = "s_ai_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+          newShifts.push({
+            id: shiftId,
+            data: dayInfo.fullDate,
+            turno: finalTurno as any,
+            frentistaResponsavel: s.frentistaResponsavel.trim(),
+            checklist: { limpezaPistas: false, usoEPIs: false, afericaoEquipamentosSeguranca: false, testeGerador: false },
+            status: "Planejado",
+            stationCnpj: cnpjPosto,
+            dayOfWeek: dayInfo.dayOfWeek,
+          });
+        }
         schedulesAdded++;
       });
     }
@@ -531,8 +577,9 @@ export default function ShiftsChecklists({
     }
 
     onUpdateShifts(newShifts);
-    onAddAuditLog("IMPORT", "Escala", `Confirmou reconhecimento por IA: ${usersCreatedCount} novos cadastros prévios, ${schedulesAdded} plantões e ${eventsAdded} eventos`, "Regular");
-    alert(`Sincronização e cadastro prévio concluídos!\n\n• ${usersCreatedCount} novos funcionários cadastrados previamente\n• ${schedulesAdded} plantões alocados\n• ${eventsAdded} eventos/reuniões criados`);
+    setActiveTab("planner");
+    onAddAuditLog("IMPORT", "Escala", `Sincronizou escala e alocou no planner: ${usersCreatedCount} novos cadastros prévios, ${schedulesAdded} plantões e ${eventsAdded} eventos`, "Regular");
+    alert(`Sincronização e Alocação no Planner concluídas com sucesso!\n\n• ${usersCreatedCount} novos funcionários cadastrados previamente\n• ${schedulesAdded} plantões alocados nas células do Planner\n• ${eventsAdded} eventos alocados nas datas da escala`);
     setAiImportModalData(null);
   };
 
@@ -4072,20 +4119,41 @@ export default function ShiftsChecklists({
                   </div>
                 </div>
 
-                <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 space-y-2">
+                <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 space-y-3">
                   <div className="flex items-center gap-2 text-indigo-900 font-extrabold text-xs">
-                    <CheckCircle2 className="h-4 w-4 text-indigo-600" /> Resumo do Reconhecimento
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600" /> Resumo de Alocação no Planner
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-white p-2.5 rounded-xl border border-indigo-100/60 shadow-sm">
-                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Plantões</span>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Plantões a Alocar</span>
                       <span className="text-lg font-black text-indigo-700">{(aiImportModalData.schedules || []).length}</span>
                     </div>
                     <div className="bg-white p-2.5 rounded-xl border border-indigo-100/60 shadow-sm">
-                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Eventos</span>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Eventos Reconhecidos</span>
                       <span className="text-lg font-black text-purple-700">{(aiImportModalData.events || []).length}</span>
                     </div>
                   </div>
+
+                  {/* Preview list of recognized schedules */}
+                  {(aiImportModalData.schedules || []).length > 0 && (
+                    <div className="pt-2 border-t border-indigo-100 space-y-1.5">
+                      <span className="text-[10px] font-bold text-indigo-900 uppercase block">Plantões Mapeados na Imagem:</span>
+                      <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                        {(aiImportModalData.schedules || []).slice(0, 10).map((sch: any, sIdx: number) => (
+                          <div key={sIdx} className="bg-white p-1.5 rounded-lg border border-indigo-100 text-[10.5px] flex items-center justify-between font-medium text-slate-700">
+                            <span className="font-bold text-slate-800 truncate max-w-[120px]">{sch.frentistaResponsavel}</span>
+                            <span className="text-indigo-600 font-mono text-[9.5px]">{sch.data}</span>
+                            <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded text-[9px] font-bold">{sch.turno}</span>
+                          </div>
+                        ))}
+                        {(aiImportModalData.schedules || []).length > 10 && (
+                          <p className="text-[9.5px] text-slate-400 italic text-center pt-0.5">
+                            +{(aiImportModalData.schedules || []).length - 10} outros plantões alocados
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -24,8 +24,10 @@ import {
   FileCheck,
   Calendar,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Bell
 } from "lucide-react";
+import { notifySupplyRequestStatus, requestBrowserNotificationPermission } from "../lib/notifications";
 
 interface SupplyRequestsProps {
   appState: AppState;
@@ -160,6 +162,15 @@ export default function SupplyRequests({
         `Solicitação de ${request.tipo} (#${id.substring(4)}) alterada para ${newStatus} por ${currentUser.nomeCompleto}`, 
         "Regular"
       );
+
+      // DISPARAR NOTIFICAÇÃO DO NAVEGADOR (Aprovado / Rejeitado / Cancelado)
+      notifySupplyRequestStatus({
+        itemDescricao: request.itemDescricao,
+        tipo: request.tipo,
+        paraQuemSolicita: request.paraQuemSolicita,
+        status: newStatus
+      });
+
       if (selectedRequest && selectedRequest.id === id) {
         setSelectedRequest({ ...selectedRequest, status: newStatus });
       }
@@ -380,16 +391,33 @@ export default function SupplyRequests({
           <p className="text-xs text-slate-500 font-medium">Fardamentos, botas, materiais administrativos e manutenção</p>
         </div>
 
-        {/* Tab selection */}
-        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200/50 w-full sm:w-auto">
+        {/* Tab selection & Notification button */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <button
-            onClick={() => setActiveTab("listar")}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-              activeTab === "listar" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-            }`}
+            onClick={async () => {
+              const granted = await requestBrowserNotificationPermission();
+              if (granted) {
+                alert("🔔 Notificações ativadas! Você receberá alertas em tempo real sobre Pedidos de Material no navegador.");
+              } else {
+                alert("⚠️ Permissão de notificação não concedida no navegador.");
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/80 rounded-2xl transition text-xs font-bold cursor-pointer"
+            title="Ativar Alertas no Navegador"
           >
-            Listar Pedidos ({filteredRequests.length})
+            <Bell className="h-3.5 w-3.5 text-indigo-600" />
+            <span className="hidden sm:inline">Alertas do Navegador</span>
           </button>
+
+          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200/50 flex-1 sm:flex-none">
+            <button
+              onClick={() => setActiveTab("listar")}
+              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                activeTab === "listar" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Listar Pedidos ({filteredRequests.length})
+            </button>
           <button
             onClick={() => setActiveTab("novo")}
             className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
@@ -399,14 +427,15 @@ export default function SupplyRequests({
             <PlusCircle className="h-3.5 w-3.5 text-indigo-500" />
             Novo Pedido
           </button>
-          <button
-            onClick={() => setActiveTab("estatisticas")}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-              activeTab === "estatisticas" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            Estatísticas
-          </button>
+            <button
+              onClick={() => setActiveTab("estatisticas")}
+              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                activeTab === "estatisticas" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Estatísticas
+            </button>
+          </div>
         </div>
       </div>
 
