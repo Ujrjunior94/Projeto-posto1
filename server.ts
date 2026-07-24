@@ -63,57 +63,67 @@ export async function createExpressApp() {
   // POST /api/gemini/import-schedule
   app.post("/api/gemini/import-schedule", async (req, res) => {
     try {
-      const { image, mimeType } = req.body;
+      const { image, mimeType, textContent } = req.body;
 
-      if (!image || !mimeType) {
-        return res.status(400).json({ error: "Imagem e mimeType são obrigatórios." });
+      if (!image && !textContent) {
+        return res.status(400).json({ error: "Imagem, documento (PDF/Excel/CSV) ou conteúdo de texto é obrigatório." });
       }
 
-      const prompt = `Analise a imagem da escala de trabalho ou escala de plantão de um posto de combustíveis.
-      Sua tarefa é ler a imagem e extrair três tipos de informações estruturadas:
-      1. Lista única de nomes de funcionários (employees) e detalhes estruturados (employeeDetails): Todos os nomes de pessoas físicas identificadas na imagem (frentistas, gerentes, supervisores, lavadores, operadores) e o cargo inferido (Frentista, Gerente, Supervisor).
-      2. Turnos de trabalho (schedules): Mapeamento de datas para turnos de trabalho e o nome do funcionário responsável.
-      3. Eventos (events): Reuniões, manutenções, auditorias ou treinamentos com data, título, tipo e horário.
+      const prompt = `Analise o documento ou imagem da escala de trabalho / escala de plantão de um posto de combustíveis (frentistas, gerentes, caixa, lavadores).
+      Sua tarefa é ler e interpretar com extrema precisão os dados da escala, diagnosticar padrões operacionais e extrair informações estruturadas em JSON:
+
+      1. Mês e Ano identificados na escala (mes: número 1-12, ano: número ex: 2026).
+      2. Lista de funcionários (employees) e detalhes estruturados (employeeDetails): nome completo, cargo (Frentista, Gerente, Supervisor, Lavador, Caixa).
+      3. Lançamentos diários (schedules):
+         - data: YYYY-MM-DD
+         - turno: "Manhã (06h - 14h)", "Tarde (14h - 22h)", "Noite (22h - 06h)", "Horista (10h - 18h)", ou "Folga Geral"
+         - frentistaResponsavel: Nome do Funcionário
+         - status: "Trabalhando", "Folga", "Horista", "Férias", "Afastado", "Licença"
+      4. Eventos e Treinamentos (events): Reuniões, inspeções, treinamentos ou auditorias com data, título, tipo e horário.
+      5. Padrões Aprendidos (learnedPatterns): Identifique a lógica operacional por funcionário:
+         - funcionario: Nome
+         - tipoEscala: "6x1", "12x36", "Fixo", "Rodízio 3 Turnos", ou "Personalizado"
+         - sequenciaTurnos: Array descrevendo a sequência dos turnos e folgas que se repete (ex: ["Manhã (06h - 14h)", "Manhã (06h - 14h)", "Folga Geral"])
+         - diasTurno: quantidade de dias de trabalho consecutivos
+         - diasFolga: quantidade de dias de folga consecutivos
+         - confiancaIA: porcentagem de confiança do aprendizado (ex: 98, 95, 88)
+         - observacao: explicação sucinta do padrão detectado (ex: "Trabalha 6 dias no turno T-02 da manhã com 1 folga semanal rotativa")
+      6. Relatório de Validação (validationReport):
+         - warnings: alertas de duplicidade de folga, domingo sem folga, horas elevadas
+         - errors: erros críticos como funcionário em dois turnos opostos no mesmo dia ou datas inexistentes.
 
       Regras de Negócio:
       - Padronização de Turnos:
         * T2, Manhã, M, 1º Turno, 06-14h -> "Manhã (06h - 14h)"
         * T3, Tarde, T, 2º Turno, 14-22h -> "Tarde (14h - 22h)"
         * T4, Noite, N, 3º Turno, 22-06h -> "Noite (22h - 06h)"
-        * Folga, F, Repouso, DSR -> "Folga Geral"
+        * Folga, F, Repouso, DSR, Folga Geral -> "Folga Geral"
         * Horista, Intermediário, H -> "Horista (10h - 18h)"
-      - Formato de Data: YYYY-MM-DD. Se a imagem mostrar apenas os dias do mês (ex: 1, 2, 3... ou Dia 01, Dia 02...), assuma o mês e ano corrente (ex: 2026-07-01, 2026-07-02, etc.).
-      - Formato de Horário: HH:MM.
-      - Nomes de Funcionários: Padronize com letras maiúsculas/minúsculas limpas (Capitalized, ex: "João Silva").
-      - Tipos de Evento Permitidos: Treinamento, Reunião, Manutenção, Auditoria, Outro.
+      - Formato de Data: YYYY-MM-DD. Assuma ano e mês informados na folha ou corrente (2026-07).
+      - Nomes: Mantenha padronizados em maiúsculo/minúsculo limpos (Capitalized).
 
-      Retorne APENAS um JSON seguindo exatamente este esquema:
-      {
-        "employees": ["Nome Completo 1", "Nome Completo 2"],
-        "employeeDetails": [
-          { "name": "Nome Completo 1", "cargo": "Frentista", "telefone": "(11) 99999-0000" }
-        ],
-        "schedules": [
-          { "data": "2026-07-01", "turno": "Manhã (06h - 14h)", "frentistaResponsavel": "Nome do Funcionário" }
-        ],
-        "events": [
-          { "data": "2026-07-01", "titulo": "Reunião Geral", "tipo": "Reunião", "horario": "09:00", "descricao": "Pauta da reunião" }
-        ]
-      }`;
+      Retorne APENAS o JSON conforme a estrutura do responseSchema.`;
+
+      let contentsParts: any[] = [{ text: prompt }];
+
+      if (image && mimeType) {
+        contentsParts.push({ inlineData: { data: image, mimeType } });
+      } else if (textContent) {
+        contentsParts.push({ text: `Conteúdo de Texto / Planilha / CSV Enviado:\n\n${textContent}` });
+      }
 
       const response = await ai.models.generateContent({
         model: "gemini-3.6-flash",
         contents: {
-          parts: [
-            { text: prompt },
-            { inlineData: { data: image, mimeType } }
-          ]
+          parts: contentsParts
         },
         config: {
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
+              mes: { type: Type.INTEGER },
+              ano: { type: Type.INTEGER },
               employees: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING }
@@ -137,7 +147,8 @@ export async function createExpressApp() {
                   properties: {
                     data: { type: Type.STRING },
                     turno: { type: Type.STRING },
-                    frentistaResponsavel: { type: Type.STRING }
+                    frentistaResponsavel: { type: Type.STRING },
+                    status: { type: Type.STRING }
                   },
                   required: ["data", "turno", "frentistaResponsavel"]
                 }
@@ -155,6 +166,29 @@ export async function createExpressApp() {
                   },
                   required: ["data", "titulo", "tipo", "horario"]
                 }
+              },
+              learnedPatterns: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    funcionario: { type: Type.STRING },
+                    tipoEscala: { type: Type.STRING },
+                    sequenciaTurnos: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    diasTurno: { type: Type.INTEGER },
+                    diasFolga: { type: Type.INTEGER },
+                    confiancaIA: { type: Type.INTEGER },
+                    observacao: { type: Type.STRING }
+                  },
+                  required: ["funcionario", "tipoEscala", "confiancaIA"]
+                }
+              },
+              validationReport: {
+                type: Type.OBJECT,
+                properties: {
+                  warnings: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  errors: { type: Type.ARRAY, items: { type: Type.STRING } }
+                }
               }
             },
             required: ["employees", "schedules", "events"]
@@ -166,7 +200,7 @@ export async function createExpressApp() {
       return res.json(extractedData);
     } catch (error: any) {
       console.error("Gemini Error:", error);
-      return res.status(500).json({ error: "Erro ao processar imagem com Gemini.", details: error.message });
+      return res.status(500).json({ error: "Erro ao processar imagem ou documento de escala com Gemini.", details: error.message });
     }
   });
 

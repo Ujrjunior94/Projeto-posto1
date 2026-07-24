@@ -66,6 +66,22 @@ export interface ShiftEvent {
   horario: string; // HH:MM
 }
 
+export type ShiftStatusType = "Trabalhando" | "Folga" | "Horista" | "Férias" | "Afastado" | "Licença";
+
+export interface EscalaPattern {
+  id: string;
+  funcionario: string;
+  tipoEscala: "6x1" | "12x36" | "Fixo" | "Rodízio 3 Turnos" | "Personalizado";
+  sequenciaTurnos: string[];
+  diasTurno: number;
+  diasFolga: number;
+  historicoEscalasCount: number;
+  ultimaAtualizacao: string; // YYYY-MM-DD
+  confiancaIA: number; // e.g. 98, 94, 85
+  stationCnpj?: string;
+  observacao?: string;
+}
+
 export interface ShiftSchedule {
   id: string;
   data: string; // YYYY-MM-DD
@@ -73,6 +89,7 @@ export interface ShiftSchedule {
   frentistaResponsavel: string; // Nome do frentista
   checklist: ShiftChecklist;
   status: "Planejado" | "Em Andamento" | "Fechado";
+  statusEscala?: ShiftStatusType;
   stationCnpj?: string;
   dayOfWeek?: string;
   occurrences?: ShiftOccurrence[];
@@ -339,6 +356,7 @@ export interface AppState {
   dashboardPreferences?: DashboardPreferences;
   supplyRequests?: SupplyRequest[];
   timesheetEntries?: TimesheetEntry[];
+  schedulePatterns?: EscalaPattern[];
   nomePosto?: string;
   securePassword?: string;
 }

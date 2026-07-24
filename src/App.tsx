@@ -504,6 +504,10 @@ export default function App() {
     setAppState((prev) => ({ ...prev, timesheetEntries }));
   };
 
+  const handleUpdateSchedulePatterns = (schedulePatterns: typeof appState.schedulePatterns) => {
+    setAppState((prev) => ({ ...prev, schedulePatterns }));
+  };
+
   const handleUpdateStationDetails = (nomePosto: string, cnpjPosto: string, securePassword?: string) => {
     setAppState((prev) => {
       const oldCnpj = currentUser?.cnpjPosto || "12.345.678/0001-99";
@@ -1011,6 +1015,7 @@ export default function App() {
               cnpjPosto={currentUser.cnpjPosto}
               onUpdateShifts={handleUpdateShifts}
               onUpdateUsers={handleUpdateUsers}
+              onUpdateSchedulePatterns={handleUpdateSchedulePatterns}
               onAddAuditLog={handleAddAuditLog}
             />
           )}
